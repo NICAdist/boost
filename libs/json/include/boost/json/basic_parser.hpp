@@ -12,6 +12,7 @@
 #define BOOST_JSON_BASIC_PARSER_HPP
 
 #include <boost/json/detail/config.hpp>
+#include <boost/json/detail/except.hpp>
 #include <boost/json/error.hpp>
 #include <boost/json/kind.hpp>
 #include <boost/json/parse_options.hpp>
@@ -30,7 +31,8 @@
     times down.
 */
 
-BOOST_JSON_NS_BEGIN
+namespace boost {
+namespace json {
 
 /** An incremental SAX parser for serialized JSON.
 
@@ -88,12 +90,12 @@ BOOST_JSON_NS_BEGIN
     the error code to a suitable value. This error
     code will be returned by the write function to
     the caller.
-\n            
+\n
     Handlers are required to declare the maximum
     limits on various elements. If these limits
     are exceeded during parsing, then parsing
     fails with an error.
-\n            
+\n
     The following declaration meets the parser's
     handler requirements:
 
@@ -263,7 +265,8 @@ BOOST_JSON_NS_BEGIN
 
     @see
         @ref parse,
-        @ref stream_parser.
+        @ref stream_parser,
+        [Validating parser example](../../doc/html/json/examples.html#json.examples.validate).
 
     @headerfile <boost/json/basic_parser.hpp>
 */
@@ -284,7 +287,7 @@ class basic_parser
         obj1,  obj2,  obj3,  obj4,
         obj5,  obj6,  obj7,  obj8,
         obj9,  obj10, obj11,
-        arr1,  arr2,  arr3, 
+        arr1,  arr2,  arr3,
         arr4,  arr5,  arr6,
         num1,  num2,  num3,  num4,
         num5,  num6,  num7,  num8,
@@ -317,7 +320,7 @@ class basic_parser
     parse_options opt_;
     // how many levels deeper the parser can go
     std::size_t depth_ = opt_.max_depth;
-    
+
     inline void reserve();
     inline const char* sentinel();
     inline bool incomplete(
@@ -349,21 +352,22 @@ class basic_parser
     inline
     const char*
     fail(
-        const char* p, 
-        error ev) noexcept;
+        const char* p,
+        error ev,
+        source_location const* loc) noexcept;
 
     BOOST_NOINLINE
     inline
     const char*
     maybe_suspend(
-        const char* p, 
+        const char* p,
         state st);
 
     BOOST_NOINLINE
     inline
     const char*
     maybe_suspend(
-        const char* p, 
+        const char* p,
         state st,
         std::size_t n);
 
@@ -453,12 +457,12 @@ class basic_parser
         std::integral_constant<bool, StackEmpty_> stack_empty,
         std::integral_constant<bool, IsKey_> is_key,
         /*std::integral_constant<bool, AllowBadUTF8_>*/ bool allow_bad_utf8);
-    
+
     template<bool StackEmpty_, char First_>
     const char* parse_number(const char* p,
         std::integral_constant<bool, StackEmpty_> stack_empty,
         std::integral_constant<char, First_> first);
-    
+
     template<bool StackEmpty_, bool IsKey_/*,
         bool AllowBadUTF8_*/>
     const char* parse_unescaped(const char* p,
@@ -702,14 +706,24 @@ public:
 
         @param ec Set to the error, if any occurred.
     */
+/** @{ */
     std::size_t
     write_some(
         bool more,
         char const* data,
         std::size_t size,
         error_code& ec);
+
+    std::size_t
+    write_some(
+        bool more,
+        char const* data,
+        std::size_t size,
+        std::error_code& ec);
+/** @} */
 };
 
-BOOST_JSON_NS_END
+} // namespace json
+} // namespace boost
 
 #endif

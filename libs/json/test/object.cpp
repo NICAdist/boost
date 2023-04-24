@@ -15,14 +15,18 @@
 #include <boost/json/serialize.hpp>
 
 #include <cmath>
+#include <forward_list>
+#include <map>
 #include <string>
 #include <type_traits>
 #include <vector>
 
 #include "test.hpp"
 #include "test_suite.hpp"
+#include "checking_resource.hpp"
 
-BOOST_JSON_NS_BEGIN
+namespace boost {
+namespace json {
 
 BOOST_STATIC_ASSERT( std::is_nothrow_destructible<object>::value );
 BOOST_STATIC_ASSERT( std::is_nothrow_move_constructible<object>::value );
@@ -90,7 +94,7 @@ public:
 
     template<class T, class U, class = void>
     struct is_equal_comparable : std::false_type {};
-    
+
     template<class T, class U>
     struct is_equal_comparable<T, U, detail::void_t<decltype(
         std::declval<T const&>() == std::declval<U const&>()
@@ -98,7 +102,7 @@ public:
 
     template<class T, class U, class = void>
     struct is_unequal_comparable : std::false_type {};
-    
+
     template<class T, class U>
     struct is_unequal_comparable<T, U, detail::void_t<decltype(
         std::declval<T const&>() != std::declval<U const&>()
@@ -153,7 +157,7 @@ public:
 
     BOOST_STATIC_ASSERT(is_unequal_comparable<object::const_reverse_iterator, object::reverse_iterator>::value);
     BOOST_STATIC_ASSERT(is_unequal_comparable<object::const_reverse_iterator, object::const_reverse_iterator>::value);
- 
+
     static
     void
     check(
@@ -292,6 +296,29 @@ public:
 
         // object(InputIt, InputIt, size_type, storage_ptr)
         {
+            // empty range
+            {
+                // random-access iterator
+                std::vector<std::pair<string_view, value>> i1;
+                object o1(i1.begin(), i1.end());
+                BOOST_TEST(o1.empty());
+
+                // bidirectional iterator
+                std::map<string_view, value> i2;
+                object o2(i2.begin(), i2.end());
+                BOOST_TEST(o2.empty());
+
+                // forward iterator
+                std::forward_list<std::pair<string_view, value>> i3;
+                object o3(i3.begin(), i3.end());
+                BOOST_TEST(o3.empty());
+
+                // input iterator
+                auto const it = make_input_iterator(i3.begin());
+                object o4(it, it);
+                BOOST_TEST(o4.empty());
+            }
+
             // small
             {
                 object o(i0_.begin(), i0_.end());
@@ -1178,6 +1205,62 @@ public:
             }
         }
 
+        // stable_erase(pos)
+        {
+            // small
+            {
+                object o(i0_);
+                auto it = o.stable_erase(o.find("10"));
+                BOOST_TEST(it->key() == "11");
+                BOOST_TEST(
+                    it->value().as_int64() == 11);
+                BOOST_TEST(serialize(o) ==
+                    R"({"0":0,"1":1,"2":2,"3":3,"4":4,)"
+                    R"("5":5,"6":6,"7":7,"8":8,"9":9,)"
+                    R"("11":11,"12":12,"13":13,"14":14,"15":15})");
+                BOOST_TEST(o.find("11") == it);
+                BOOST_TEST(o.find("14") == o.end() - 2);
+            }
+
+            // large
+            {
+                object o(i1_);
+                auto it = o.stable_erase(o.find("10"));
+                BOOST_TEST(it->key() == "11");
+                BOOST_TEST(
+                    it->value().as_int64() == 11);
+                BOOST_TEST(serialize(o) ==
+                    R"({"0":0,"1":1,"2":2,"3":3,"4":4,)"
+                    R"("5":5,"6":6,"7":7,"8":8,"9":9,)"
+                    R"("11":11,"12":12,"13":13,"14":14,"15":15,)"
+                    R"("16":16,"17":17,"18":18,"19":19})");
+                BOOST_TEST(o.find("11") == it);
+                BOOST_TEST(o.find("18") == o.end() - 2);
+            }
+        }
+
+        // stable_erase(key)
+        {
+            {
+                object o({
+                    {"a", 1},
+                    {"b", true},
+                    {"c", "hello"}});
+                BOOST_TEST(o.stable_erase("b2") == 0);
+                check(o, 3);
+            }
+
+            {
+                object o({
+                    {"a", 1},
+                    {"b", true},
+                    {"b2", 2},
+                    {"c", "hello"}});
+                BOOST_TEST(o.stable_erase("b2") == 1);
+                check(o, 4);
+            }
+        }
+
         // swap(object&)
         {
             {
@@ -1224,7 +1307,7 @@ public:
         auto const& co0 = o0;
         auto const& co1 = o1;
 
-        // at(key)
+        // at(key) &
         {
             BOOST_TEST(
                 o1.at("a").is_number());
@@ -1232,12 +1315,22 @@ public:
                 std::out_of_range);
         }
 
-        // at(key) const
+        // at(key) const&
         {
             BOOST_TEST(
                 co1.at("a").is_number());
             BOOST_TEST_THROWS((co1.at("d")),
                 std::out_of_range);
+        }
+
+        // at(key) &&
+        {
+            BOOST_TEST(
+                std::move(o1).at("a").is_number());
+            BOOST_TEST_THROWS((std::move(o1).at("d")),
+                std::out_of_range);
+            value&& rv = std::move(o1).at("a");
+            (void)rv;
         }
 
         // operator[&](key)
@@ -1470,6 +1563,42 @@ public:
     }
 
     void
+    testAllocation()
+    {
+        {
+            checking_resource res;
+            object o(&res);
+            o.reserve(1);
+        }
+
+        {
+            checking_resource res;
+            object o(&res);
+            o.reserve(1000);
+        }
+
+        {
+            checking_resource res;
+            object o({std::make_pair("one", 1)}, &res);
+        }
+    }
+
+    void
+    testHash()
+    {
+        BOOST_TEST(check_hash_equal(
+            object(), object({})));
+        BOOST_TEST(expect_hash_not_equal(
+            object(), object({{"1",1},{"2",2}})));
+        BOOST_TEST(check_hash_equal(
+            object({{"a",1}, {"b",2}, {"c",3}}),
+            object({{"b",2}, {"c",3}, {"a",1}})));
+        BOOST_TEST(expect_hash_not_equal(
+            object({{"a",1}, {"b",2}, {"c",3}}),
+            object({{"b",2}, {"c",3}})));
+    }
+
+    void
     run()
     {
         testDtor();
@@ -1482,9 +1611,12 @@ public:
         testImplementation();
         testCollisions();
         testEquality();
+        testAllocation();
+        testHash();
     }
 };
 
 TEST_SUITE(object_test, "boost.json.object");
 
-BOOST_JSON_NS_END
+} // namespace json
+} // namespace boost

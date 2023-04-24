@@ -55,7 +55,8 @@
 #include <boost/json/detail/ryu/detail/d2s.hpp>
 #include <boost/json/detail/ryu/detail/d2s_intrinsics.hpp>
 
-BOOST_JSON_NS_BEGIN
+namespace boost {
+namespace json {
 namespace detail {
 
 namespace ryu {
@@ -716,28 +717,10 @@ d2s_buffered_n(
     return to_chars(v, ieeeSign, result);
 }
 
-void
-d2s_buffered(
-    double f,
-    char* result) noexcept
-{
-    const int index = d2s_buffered_n(f, result);
-
-    // Terminate the string.
-    result[index] = '\0';
-}
-
-char*
-d2s(double f) noexcept
-{
-    static thread_local char result[25];
-    d2s_buffered(f, result);
-    return result;
-}
-
 } // ryu
 
 } // detail
-BOOST_JSON_NS_END
+} // namespace json
+} // namespace boost
 
 #endif

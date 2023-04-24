@@ -291,9 +291,9 @@ template<class Q, class... L> using mp_product_q = typename detail::mp_product_i
 namespace detail
 {
 
-template<class L, class L2> struct mp_drop_impl;
+template<class L, class L2, class En> struct mp_drop_impl;
 
-template<template<class...> class L, class... T, template<class...> class L2, class... U> struct mp_drop_impl<L<T...>, L2<U...>>
+template<template<class...> class L, class... T, template<class...> class L2, class... U> struct mp_drop_impl<L<T...>, L2<U...>, mp_true>
 {
     template<class... W> static mp_identity<L<W...>> f( U*..., mp_identity<W>*... );
 
@@ -304,9 +304,9 @@ template<template<class...> class L, class... T, template<class...> class L2, cl
 
 } // namespace detail
 
-template<class L, std::size_t N> using mp_drop_c = typename detail::mp_drop_impl<L, mp_repeat_c<mp_list<void>, N>>::type;
+template<class L, std::size_t N> using mp_drop_c = typename detail::mp_drop_impl<L, mp_repeat_c<mp_list<void>, N>, mp_bool<N <= mp_size<L>::value>>::type;
 
-template<class L, class N> using mp_drop = typename detail::mp_drop_impl<L, mp_repeat<mp_list<void>, N>>::type;
+template<class L, class N> using mp_drop = mp_drop_c<L, std::size_t{ N::value }>;
 
 // mp_from_sequence<S>
 namespace detail
@@ -1239,6 +1239,66 @@ template<class L, class Q> using mp_pairwise_fold_impl = mp_transform_q<Q, mp_po
 
 template<class L, class Q> using mp_pairwise_fold_q = mp_eval_if<mp_empty<L>, mp_clear<L>, detail::mp_pairwise_fold_impl, L, Q>;
 template<class L, template<class...> class F> using mp_pairwise_fold = mp_pairwise_fold_q<L, mp_quote<F>>;
+
+// mp_intersperse<L, S>
+namespace detail
+{
+
+template<class L, class S> struct mp_intersperse_impl
+{
+};
+
+#if BOOST_MP11_WORKAROUND( BOOST_MP11_MSVC, <= 1800 )
+
+template<template<class...> class L, class... T, class S> struct mp_intersperse_impl<L<T...>, S>
+{
+    static_assert( sizeof...(T) == 0, "T... must be empty" );
+    using type = L<>;
+};
+
+#else
+
+template<template<class...> class L, class S> struct mp_intersperse_impl<L<>, S>
+{
+    using type = L<>;
+};
+
+#endif
+
+template<template<class...> class L, class T1, class... T, class S> struct mp_intersperse_impl<L<T1, T...>, S>
+{
+    using type = mp_append<L<T1>, L<S, T>...>;
+};
+
+} // namespace detail
+
+template<class L, class S> using mp_intersperse = typename detail::mp_intersperse_impl<L, S>::type;
+
+// mp_split<L, S>
+namespace detail
+{
+
+template<class L, class S, class J> struct mp_split_impl;
+
+} // namespace detail
+
+template<class L, class S> using mp_split = typename detail::mp_split_impl<L, S, mp_find<L, S>>::type;
+
+namespace detail
+{
+
+template<class L, class S, class J> using mp_split_impl_ = mp_push_front<mp_split<mp_drop_c<L, J::value + 1>, S>, mp_take<L, J>>;
+
+template<class L, class S, class J> struct mp_split_impl
+{
+    using type = mp_eval_if_c<mp_size<L>::value == J::value, mp_push_back<mp_clear<L>, L>, mp_split_impl_, L, S, J>;
+};
+
+} // namespace detail
+
+// mp_join<L, S>
+
+template<class L, class S> using mp_join = mp_apply<mp_append, mp_intersperse<L, mp_list<S>>>;
 
 } // namespace mp11
 } // namespace boost

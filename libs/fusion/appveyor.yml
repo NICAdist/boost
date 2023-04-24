@@ -11,15 +11,19 @@ environment:
   matrix:
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       TOOLSET: msvc-9.0
+      ADDRMD: 32
       CXXSTD: latest # fake
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       TOOLSET: msvc-10.0
+      ADDRMD: 32
       CXXSTD: latest # fake
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       TOOLSET: msvc-11.0
+      ADDRMD: 32
       CXXSTD: latest # fake
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       TOOLSET: msvc-12.0
+      ADDRMD: 32
       CXXSTD: latest # fake
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       TOOLSET: msvc-14.0
@@ -78,6 +82,8 @@ install:
   - git submodule init libs/type_traits
   - git submodule init libs/typeof
   - git submodule init libs/utility
+  - git submodule init libs/describe
+  - git submodule init libs/mp11
 
   - git submodule init libs/headers tools/boost_install tools/build
   - git submodule update
@@ -88,4 +94,5 @@ install:
 build: off
 
 test_script:
-  - b2 -j%NUMBER_OF_PROCESSORS% --hash libs/fusion/test toolset=%TOOLSET% cxxstd=%CXXSTD%
+  - if not "%ADDRMD%" == "" set ADDRMD=address-model=%ADDRMD%
+  - b2 -j%NUMBER_OF_PROCESSORS% --hash libs/fusion/test toolset=%TOOLSET% cxxstd=%CXXSTD% %ADDRMD%

@@ -21,10 +21,33 @@ environment:
       TOOLSET: msvc-12.0,msvc-14.0
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
       TOOLSET: msvc-14.1,clang-win
-      CXXSTD: 14,17
+      CXXSTD: 14,17,latest
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      TOOLSET: msvc-14.0
+      __CXXFLAGS__: /ZI /FS
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      TOOLSET: msvc-14.1
+      CXXSTD: 14,17,latest
+      __CXXFLAGS__: /ZI /FS
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
       TOOLSET: msvc-14.2
-      CXXSTD: 14,17
+      CXXSTD: 14,17,20,latest
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      ADDPATH: C:\cygwin\bin;
+      TOOLSET: gcc
+      CXXSTD: 03,11,14,1z
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      ADDPATH: C:\cygwin64\bin;
+      TOOLSET: gcc
+      CXXSTD: 03,11,14,1z
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      ADDPATH: C:\mingw\bin;
+      TOOLSET: gcc
+      CXXSTD: 03,11,14,1z
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      ADDPATH: C:\mingw-w64\x86_64-6.3.0-posix-seh-rt_v5-rev1\mingw64\bin;
+      TOOLSET: gcc
+      CXXSTD: 03,11,14,1z
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
       CMAKE: 1
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
@@ -44,10 +67,12 @@ install:
   - cd boost-root
   - git submodule update --init tools/build
   - git submodule update --init tools/boost_install
+  - git submodule update --init tools/cmake
+  - git submodule update --init libs/headers
   - git submodule update --init libs/config
   - git submodule update --init libs/core
-  - git submodule update --init libs/headers
-  - git submodule update --init tools/cmake
+  - git submodule update --init libs/static_assert
+  - git submodule update --init libs/throw_exception
   - xcopy /s /e /q %APPVEYOR_BUILD_FOLDER% libs\assert\
   - cmd /c bootstrap
   - b2 -d0 headers
@@ -56,16 +81,18 @@ build: off
 
 test_script:
 
+  - PATH=%ADDPATH%%PATH%
   - if not "%CXXSTD%" == "" set CXXSTD=cxxstd=%CXXSTD%
   - if not "%ADDRMD%" == "" set ADDRMD=address-model=%ADDRMD%
-  - if "%CMAKE%%CMAKE_SUBDIR%%CMAKE_INSTALL%" == ""  b2 -j 3 libs/assert/test toolset=%TOOLSET% %CXXSTD% %ADDRMD%
+  - if not "%__CXXFLAGS__%" == "" set __CXXFLAGS__=cxxflags="%__CXXFLAGS__%"
+  - if "%CMAKE%%CMAKE_SUBDIR%%CMAKE_INSTALL%" == ""  b2 -j 1 libs/assert/test toolset=%TOOLSET% %CXXSTD% %ADDRMD% %__CXXFLAGS__% variant=debug,release
 
   - if not "%CMAKE%" == ""  mkdir __build__ && cd __build__
-  - if not "%CMAKE%" == ""  cmake -DBOOST_ENABLE_CMAKE=1 -DBoost_VERBOSE=1 -DBOOST_INCLUDE_LIBRARIES=assert ..
-  - if not "%CMAKE%" == ""  ctest --output-on-failure -R boost_assert -C Debug
-  - if not "%CMAKE%" == ""  ctest --output-on-failure -R boost_assert -C Release
-  - if not "%CMAKE%" == ""  ctest --output-on-failure -R boost_assert -C MinSizeRel
-  - if not "%CMAKE%" == ""  ctest --output-on-failure -R boost_assert -C RelWithDebInfo
+  - if not "%CMAKE%" == ""  cmake -DBUILD_TESTING=ON -DBOOST_INCLUDE_LIBRARIES=assert ..
+  - if not "%CMAKE%" == ""  cmake --build . --target tests --config Debug & ctest --output-on-failure --no-tests=error -C Debug
+  - if not "%CMAKE%" == ""  cmake --build . --target tests --config Release & ctest --output-on-failure --no-tests=error -C Release
+  - if not "%CMAKE%" == ""  cmake --build . --target tests --config MinSizeRel & ctest --output-on-failure --no-tests=error -C MinSizeRel
+  - if not "%CMAKE%" == ""  cmake --build . --target tests --config RelWithDebInfo & ctest --output-on-failure --no-tests=error -C RelWithDebInfo
 
   - if not "%CMAKE_SUBDIR%" == ""  cd libs/assert/test/cmake_subdir_test && mkdir __build__ && cd __build__
   - if not "%CMAKE_SUBDIR%" == ""  cmake ..
@@ -75,7 +102,7 @@ test_script:
   - if not "%CMAKE_SUBDIR%" == ""  cmake --build . --config RelWithDebInfo && cmake --build . --target check --config RelWithDebInfo
 
   - if not "%CMAKE_INSTALL%" == ""  mkdir __build__ && cd __build__
-  - if not "%CMAKE_INSTALL%" == ""  cmake -DBOOST_ENABLE_CMAKE=1 -DBoost_VERBOSE=1 -DBOOST_INCLUDE_LIBRARIES="assert;config" -DCMAKE_INSTALL_PREFIX=C:/cmake-prefix ..
+  - if not "%CMAKE_INSTALL%" == ""  cmake -DBOOST_INCLUDE_LIBRARIES=assert -DCMAKE_INSTALL_PREFIX=C:/cmake-prefix ..
   - if not "%CMAKE_INSTALL%" == ""  cmake --build . --target install --config Debug
   - if not "%CMAKE_INSTALL%" == ""  cmake --build . --target install --config Release
   - if not "%CMAKE_INSTALL%" == ""  cd ../libs/assert/test/cmake_install_test && mkdir __build__ && cd __build__

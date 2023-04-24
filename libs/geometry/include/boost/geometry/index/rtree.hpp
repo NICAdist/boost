@@ -3,11 +3,11 @@
 // R-tree implementation
 //
 // Copyright (c) 2008 Federico J. Fernandez.
-// Copyright (c) 2011-2019 Adam Wulkiewicz, Lodz, Poland.
+// Copyright (c) 2011-2022 Adam Wulkiewicz, Lodz, Poland.
 // Copyright (c) 2020 Caian Benedicto, Campinas, Brazil.
 //
-// This file was modified by Oracle on 2019-2020.
-// Modifications copyright (c) 2019-2020 Oracle and/or its affiliates.
+// This file was modified by Oracle on 2019-2021.
+// Modifications copyright (c) 2019-2021 Oracle and/or its affiliates.
 // Contributed and/or modified by Adam Wulkiewicz, on behalf of Oracle
 //
 // Use, modification and distribution is subject to the Boost Software License,
@@ -90,7 +90,15 @@
 #include <boost/geometry/index/detail/rtree/query_iterators.hpp>
 
 #ifdef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL
-// serialization
+#ifndef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_SERIALIZATION
+#define BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_SERIALIZATION
+#endif
+#ifndef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_ITERATORS
+#define BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_ITERATORS
+#endif
+#endif
+
+#ifdef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_SERIALIZATION
 #include <boost/geometry/index/detail/serialization.hpp>
 #endif
 
@@ -129,10 +137,9 @@ Predefined algorithms with run-time parameters are:
  \li \c boost::geometry::index::dynamic_rstar.
 
 \par IndexableGetter
-The object of IndexableGetter type translates from Value to Indexable each time
-r-tree requires it. This means that this operation is done for each Value
-access. Therefore the IndexableGetter should return the Indexable by
-a reference type. The Indexable should not be calculated since it could harm
+An object of IndexableGetter type translates from Value to Indexable each time
+r-tree requires it. This operation is done for each Value access.
+The Indexable should not be calculated each time since it could harm
 the performance. The default IndexableGetter can translate all types adapted
 to Point, Box or Segment concepts (called Indexables). Furthermore, it can
 handle <tt>std::pair<Indexable, T></tt>, <tt>std::tuple<Indexable, ...></tt>
@@ -312,7 +319,7 @@ private:
     typedef typename members_holder::allocator_traits_type allocator_traits_type;
 
     friend class detail::rtree::utilities::view<rtree>;
-#ifdef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL
+#ifdef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_SERIALIZATION
     friend class detail::rtree::private_view<rtree>;
     friend class detail::rtree::const_private_view<rtree>;
 #endif
@@ -598,7 +605,7 @@ public:
     /*!
     \brief  The copy constructor.
 
-    It uses parameters, translator and allocator from the source tree.
+    It uses parameters, observers and allocator from the source tree.
 
     \param src          The rtree which content will be copied.
 
@@ -619,7 +626,7 @@ public:
     /*!
     \brief The copy constructor.
 
-    It uses Parameters and translator from the source tree.
+    It uses parameters and observers from the source tree.
 
     \param src          The rtree which content will be copied.
     \param allocator    The allocator which will be used.
@@ -640,7 +647,7 @@ public:
     /*!
     \brief The moving constructor.
 
-    It uses parameters, translator and allocator from the source tree.
+    It uses parameters, observers and allocator from the source tree.
 
     \param src          The rtree which content will be moved.
 
@@ -661,7 +668,7 @@ public:
     /*!
     \brief The moving constructor.
 
-    It uses parameters and translator from the source tree.
+    It uses parameters and observers from the source tree.
 
     \param src          The rtree which content will be moved.
     \param allocator    The allocator.
@@ -692,7 +699,7 @@ public:
     /*!
     \brief The assignment operator.
 
-    It uses parameters and translator from the source tree.
+    It uses parameters and observers from the source tree.
 
     \param src          The rtree which content will be copied.
 
@@ -730,7 +737,7 @@ public:
     /*!
     \brief The moving assignment.
 
-    It uses parameters and translator from the source tree.
+    It uses parameters and observers from the source tree.
 
     \param src          The rtree which content will be moved.
 
@@ -782,7 +789,7 @@ public:
     /*!
     \brief Swaps contents of two rtrees.
 
-    Parameters, translator and allocators are swapped as well.
+    Parameters, observers and allocators are swapped as well.
 
     \param other    The rtree which content will be swapped with this rtree content.
 
@@ -1079,17 +1086,9 @@ public:
     template <typename Predicates, typename OutIter>
     size_type query(Predicates const& predicates, OutIter out_it) const
     {
-        if ( !m_members.root )
-            return 0;
-
-        static const unsigned distance_predicates_count = detail::predicates_count_distance<Predicates>::value;
-        static const bool is_distance_predicate = 0 < distance_predicates_count;
-        BOOST_GEOMETRY_STATIC_ASSERT((distance_predicates_count <= 1),
-            "Only one distance predicate can be passed.",
-            Predicates);
-
-        return query_dispatch(predicates, out_it,
-                              std::integral_constant<bool, is_distance_predicate>());
+        return m_members.root
+             ? query_dispatch(predicates, out_it)
+             : 0;
     }
 
     /*!
@@ -1183,7 +1182,18 @@ public:
         return const_query_iterator();
     }
 
-#ifndef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL
+private:
+    template <typename Predicates>
+    using query_iterator_t = std::conditional_t
+        <
+            detail::predicates_count_distance<Predicates>::value == 0,
+            detail::rtree::iterators::spatial_query_iterator<members_holder, Predicates>,
+            detail::rtree::iterators::distance_query_iterator<members_holder, Predicates>
+        >;
+
+#ifdef BOOST_GEOMETRY_INDEX_DETAIL_EXPERIMENTAL_ITERATORS
+public:
+#else
 private:
 #endif
     /*!
@@ -1240,38 +1250,15 @@ private:
     \return             The iterator pointing at the begin of the query range.
     */
     template <typename Predicates>
-    std::conditional_t
-        <
-            detail::predicates_count_distance<Predicates>::value == 0,
-            detail::rtree::iterators::spatial_query_iterator<members_holder, Predicates>,
-            detail::rtree::iterators::distance_query_iterator
-                <
-                    members_holder, Predicates,
-                    detail::predicates_find_distance<Predicates>::value
-                >
-        >
-    qbegin_(Predicates const& predicates) const
+    query_iterator_t<Predicates> qbegin_(Predicates const& predicates) const
     {
-        static const unsigned distance_predicates_count = detail::predicates_count_distance<Predicates>::value;
-        BOOST_GEOMETRY_STATIC_ASSERT((distance_predicates_count <= 1),
+        BOOST_GEOMETRY_STATIC_ASSERT((detail::predicates_count_distance<Predicates>::value <= 1),
             "Only one distance predicate can be passed.",
             Predicates);
 
-        typedef std::conditional_t
-            <
-                detail::predicates_count_distance<Predicates>::value == 0,
-                detail::rtree::iterators::spatial_query_iterator<members_holder, Predicates>,
-                detail::rtree::iterators::distance_query_iterator
-                    <
-                        members_holder, Predicates,
-                        detail::predicates_find_distance<Predicates>::value
-                    >
-            > iterator_type;
-
-        if ( !m_members.root )
-            return iterator_type(m_members.parameters(), m_members.translator(), predicates);
-
-        return iterator_type(m_members.root, m_members.parameters(), m_members.translator(), predicates);
+        return m_members.root
+             ? query_iterator_t<Predicates>(m_members, predicates)
+             : query_iterator_t<Predicates>(predicates);
     }
 
     /*!
@@ -1307,35 +1294,13 @@ private:
     \return             The iterator pointing at the end of the query range.
     */
     template <typename Predicates>
-    std::conditional_t
-        <
-            detail::predicates_count_distance<Predicates>::value == 0,
-            detail::rtree::iterators::spatial_query_iterator<members_holder, Predicates>,
-            detail::rtree::iterators::distance_query_iterator
-                <
-                    members_holder, Predicates,
-                    detail::predicates_find_distance<Predicates>::value
-                >
-        >
-    qend_(Predicates const& predicates) const
+    query_iterator_t<Predicates> qend_(Predicates const& predicates) const
     {
-        static const unsigned distance_predicates_count = detail::predicates_count_distance<Predicates>::value;
-        BOOST_GEOMETRY_STATIC_ASSERT((distance_predicates_count <= 1),
+        BOOST_GEOMETRY_STATIC_ASSERT((detail::predicates_count_distance<Predicates>::value <= 1),
             "Only one distance predicate can be passed.",
             Predicates);
 
-        typedef std::conditional_t
-            <
-                detail::predicates_count_distance<Predicates>::value == 0,
-                detail::rtree::iterators::spatial_query_iterator<members_holder, Predicates>,
-                detail::rtree::iterators::distance_query_iterator
-                    <
-                        members_holder, Predicates,
-                        detail::predicates_find_distance<Predicates>::value
-                    >
-            > iterator_type;
-
-        return iterator_type(m_members.parameters(), m_members.translator(), predicates);
+        return query_iterator_t<Predicates>(m_members.parameters(), m_members.translator(), predicates);
     }
 
     /*!
@@ -1436,10 +1401,9 @@ public:
     */
     const_iterator begin() const
     {
-        if ( !m_members.root )
-            return const_iterator();
-
-        return const_iterator(m_members.root);
+        return m_members.root
+             ? const_iterator(m_members.root)
+             : const_iterator();
     }
 
     /*!
@@ -1894,15 +1858,16 @@ private:
     \par Exception-safety
     strong
     */
-    template <typename Predicates, typename OutIter>
-    size_type query_dispatch(Predicates const& predicates, OutIter out_it, std::false_type /*is_distance_predicate*/) const
+    template
+    <
+        typename Predicates, typename OutIter,
+        std::enable_if_t<(detail::predicates_count_distance<Predicates>::value == 0), int> = 0
+    >
+    size_type query_dispatch(Predicates const& predicates, OutIter out_it) const
     {
         detail::rtree::visitors::spatial_query<members_holder, Predicates, OutIter>
-            find_v(m_members.parameters(), m_members.translator(), predicates, out_it);
-
-        detail::rtree::apply_visitor(find_v, *m_members.root);
-
-        return find_v.found_count;
+            query(m_members, predicates, out_it);
+        return query.apply(m_members);
     }
 
     /*!
@@ -1911,22 +1876,21 @@ private:
     \par Exception-safety
     strong
     */
-    template <typename Predicates, typename OutIter>
-    size_type query_dispatch(Predicates const& predicates, OutIter out_it, std::true_type /*is_distance_predicate*/) const
+    template
+    <
+        typename Predicates, typename OutIter,
+        std::enable_if_t<(detail::predicates_count_distance<Predicates>::value > 0), int> = 0
+    >
+    size_type query_dispatch(Predicates const& predicates, OutIter out_it) const
     {
-        BOOST_GEOMETRY_INDEX_ASSERT(m_members.root, "The root must exist");
+        BOOST_GEOMETRY_STATIC_ASSERT((detail::predicates_count_distance<Predicates>::value == 1),
+                                     "Only one distance predicate can be passed.",
+                                     Predicates);
 
-        static const unsigned distance_predicate_index = detail::predicates_find_distance<Predicates>::value;
-        detail::rtree::visitors::distance_query<
-            members_holder,
-            Predicates,
-            distance_predicate_index,
-            OutIter
-        > distance_v(m_members.parameters(), m_members.translator(), predicates, out_it);
+        detail::rtree::visitors::distance_query<members_holder, Predicates>
+            distance_v(m_members, predicates);
 
-        detail::rtree::apply_visitor(distance_v, *m_members.root);
-
-        return distance_v.finish();
+        return distance_v.apply(m_members, out_it);
     }
     
     /*!

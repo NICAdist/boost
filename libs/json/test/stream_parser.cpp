@@ -17,12 +17,14 @@
 
 #include <sstream>
 #include <iostream>
+#include <cstring>
 
 #include "parse-vectors.hpp"
 #include "test.hpp"
 #include "test_suite.hpp"
 
-BOOST_JSON_NS_BEGIN
+namespace boost {
+namespace json {
 
 BOOST_STATIC_ASSERT( std::is_nothrow_destructible<stream_parser>::value );
 
@@ -139,7 +141,9 @@ public:
     testMembers()
     {
         // write_some(char const*, size_t, error_code&)
+        // write_some(char const*, size_t, std::error_code&)
         // write_some(string_view, error_code&)
+        // write_some(string_view, std::error_code&)
         {
             {
                 stream_parser p;
@@ -150,7 +154,21 @@ public:
             }
             {
                 stream_parser p;
+                std::error_code ec;
+                BOOST_TEST(p.write_some(
+                    "[]*", ec) == 2);
+                BOOST_TEST(! ec);
+            }
+            {
+                stream_parser p;
                 error_code ec;
+                BOOST_TEST(p.write_some(
+                    "[*", ec) == 1);
+                BOOST_TEST(ec);
+            }
+            {
+                stream_parser p;
+                std::error_code ec;
                 BOOST_TEST(p.write_some(
                     "[*", ec) == 1);
                 BOOST_TEST(ec);
@@ -174,7 +192,9 @@ public:
         }
 
         // write(char const*, size_t, error_code&)
+        // write(char const*, size_t, std::error_code&)
         // write(string_view, error_code&)
+        // write(string_view, std::error_code&)
         {
             {
                 stream_parser p;
@@ -185,10 +205,24 @@ public:
             }
             {
                 stream_parser p;
+                std::error_code ec;
+                BOOST_TEST(p.write(
+                    "null", ec) == 4);
+                BOOST_TEST(! ec);
+            }
+            {
+                stream_parser p;
                 error_code ec;
                 p.write("[]*", ec),
                 BOOST_TEST(
                     ec == error::extra_data);
+                BOOST_TEST(ec.has_location());
+            }
+            {
+                stream_parser p;
+                std::error_code ec;
+                p.write("[]*", ec),
+                BOOST_TEST(ec == error::extra_data);
             }
         }
 
@@ -208,8 +242,9 @@ public:
             }
         }
 
-        // finish(error_code&)
         // finish()
+        // finish(error_code&)
+        // finish(std::error_code&)
         {
             {
                 stream_parser p;
@@ -233,11 +268,28 @@ public:
                 p.finish(ec);
                 BOOST_TEST(
                     ec == error::incomplete);
+                BOOST_TEST(ec.has_location());
             }
             {
                 stream_parser p;
                 p.write("[1,2");
                 error_code ec;
+                p.finish(ec);
+                BOOST_TEST_THROWS(
+                    p.finish(),
+                    system_error);
+            }
+            {
+                stream_parser p;
+                p.write("[1,2");
+                std::error_code ec;
+                p.finish(ec);
+                BOOST_TEST(ec == error::incomplete);
+            }
+            {
+                stream_parser p;
+                p.write("[1,2");
+                std::error_code ec;
                 p.finish(ec);
                 BOOST_TEST_THROWS(
                     p.finish(),
@@ -277,6 +329,7 @@ public:
                 p.write("[]*", ec);
                 BOOST_TEST(
                     ec == error::extra_data);
+                BOOST_TEST(ec.has_location());
                 BOOST_TEST(! p.done());
                 BOOST_TEST_THROWS(
                     p.release(),
@@ -306,7 +359,7 @@ public:
 
     void
     static
-    check_round_trip(value const& jv1, 
+    check_round_trip(value const& jv1,
         const parse_options& po = parse_options())
     {
         auto const s2 =
@@ -343,7 +396,7 @@ public:
     template<class F>
     static
     void
-    grind(string_view s, F const& f, 
+    grind(string_view s, F const& f,
         const parse_options& po = parse_options())
     {
         try
@@ -387,7 +440,7 @@ public:
 
     static
     void
-    grind(string_view s, 
+    grind(string_view s,
         const parse_options& po = parse_options())
     {
         grind(s,
@@ -533,13 +586,13 @@ public:
                     if(BOOST_TEST(! ec))
                         check_round_trip(
                             p.release());
-                }   
+                }
             }
         }
     }
 
     //------------------------------------------------------
-    
+
     struct f_boost
     {
         static
@@ -856,6 +909,7 @@ public:
             p.write("[]", 2, ec);
             BOOST_TEST(
                 ec == error::too_deep);
+            BOOST_TEST(ec.has_location());
         }
     }
 
@@ -922,6 +976,7 @@ public:
             p.write("{}", 2, ec);
             BOOST_TEST(
                 ec == error::too_deep);
+            BOOST_TEST(ec.has_location());
         }
     }
 
@@ -946,6 +1001,7 @@ public:
                 error_code ec;
                 auto jv = parse("xxx", ec);
                 BOOST_TEST(ec);
+                BOOST_TEST(ec.has_location());
                 BOOST_TEST(jv.is_null());
             }
         }
@@ -965,6 +1021,7 @@ public:
                 monotonic_resource mr;
                 auto jv = parse("xxx", ec, &mr);
                 BOOST_TEST(ec);
+                BOOST_TEST(ec.has_location());
                 BOOST_TEST(jv.is_null());
             }
         }
@@ -1027,7 +1084,7 @@ R"xx({
         }
     }
 })xx";
-        string_view out = 
+        string_view out =
             "{\"glossary\":{\"title\":\"example glossary\",\"GlossDiv\":"
             "{\"title\":\"S\",\"GlossList\":{\"GlossEntry\":{\"ID\":\"SGML\","
             "\"SortAs\":\"SGML\",\"GlossTerm\":\"Standard Generalized Markup "
@@ -1035,7 +1092,7 @@ R"xx({
             "\"GlossDef\":{\"para\":\"A meta-markup language, used to create "
             "markup languages such as DocBook.\",\"GlossSeeAlso\":[\"GML\",\"XML\"]},"
             "\"GlossSee\":\"markup\"}}}}}";
-        storage_ptr sp = 
+        storage_ptr sp =
             make_shared_resource<monotonic_resource>();
         stream_parser p(sp);
         error_code ec;
@@ -1046,7 +1103,7 @@ R"xx({
             BOOST_TEST(serialize(p.release()) == out);
     }
 
-    void 
+    void
     testTrailingCommas()
     {
         parse_options enabled;
@@ -1096,7 +1153,7 @@ R"xx({
         grind("{\"a\":1// c++ \n, \"b\":2}", enabled);
         grind("{\"a\":1, // c++ \n \"b\":2}", enabled);
         grind("{\"a\"// c++ \n:1}", enabled);
-        grind("{\"a\":// c++ \n1}", enabled);   
+        grind("{\"a\":// c++ \n1}", enabled);
     }
 
     void
@@ -1198,6 +1255,33 @@ R"xx({
         BOOST_TEST(serialize(t.jv) == "[]");
     }
 
+    void
+    testIssue876()
+    {
+        stream_parser p;
+        p.write_some( R"("\u20")", 5 );
+
+        std::string s = "19";
+        for( std::size_t i = 0; i < BOOST_JSON_STACK_BUFFER_SIZE; ++i )
+            s += " ";
+        s += "\"";
+        p.write_some( s.data(), s.size() ); // this asserted because of a bug
+        BOOST_TEST( p.release().is_string() );
+    }
+
+    // https://github.com/boostorg/json/pull/814
+    void
+    testSentinelOverlap()
+    {
+        struct {
+            char buffer[8];
+            boost::json::stream_parser p;
+        } s;
+        memcpy(s.buffer, "{\"12345\"", 8);
+        s.p.write(s.buffer, sizeof(s.buffer));
+        s.p.write(":0}", 3);
+    }
+
     //------------------------------------------------------
 
     void
@@ -1221,9 +1305,12 @@ R"xx({
         testDupeKeys();
         testIssue15();
         testIssue45();
+        testIssue876();
+        testSentinelOverlap();
     }
 };
 
 TEST_SUITE(stream_parser_test, "boost.json.stream_parser");
 
-BOOST_JSON_NS_END
+} // namespace json
+} // namespace boost
