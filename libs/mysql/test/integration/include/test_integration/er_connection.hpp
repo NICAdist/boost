@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2023 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
+// Copyright (c) 2019-2024 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -77,6 +77,7 @@ public:
     virtual network_result<void> read_resultset_head(execution_state& st) = 0;
     virtual network_result<rows_view> read_some_rows(execution_state& st) = 0;
     virtual network_result<void> ping() = 0;
+    virtual network_result<void> reset_connection() = 0;
     virtual network_result<void> quit() = 0;
     virtual network_result<void> close() = 0;
 

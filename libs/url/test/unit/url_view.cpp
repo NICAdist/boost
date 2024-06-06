@@ -683,6 +683,12 @@ public:
             BOOST_TEST_EQ(u.query(), "k=");
         }
         {
+            url_view u("http://?k[]=");
+            BOOST_TEST(u.has_query());
+            BOOST_TEST_EQ(u.encoded_query(), "k[]=");
+            BOOST_TEST_EQ(u.query(), "k[]=");
+        }
+        {
             url_view u("http://?#");
             BOOST_TEST(u.has_query());
             BOOST_TEST_EQ(u.encoded_query(), "");
@@ -1052,6 +1058,11 @@ public:
         testParseOriginForm();
 
         testJavadocs();
+
+        {
+            auto r = parse_uri("https://us%65rnam%65:password@%65xampl%65.com:8080/path/to/r%65sourc%65?qu%65ry_param=valu%65#s%65ction");
+            ignore_unused(r);
+        }
     }
 };
 

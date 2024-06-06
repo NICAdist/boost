@@ -28,6 +28,7 @@
 #include <boost/geometry/geometries/register/linestring.hpp>
 
 #include <boost/geometry/util/condition.hpp>
+#include <boost/geometry/util/constexpr.hpp>
 #include <boost/geometry/util/rational.hpp>
 
 #include "test_intersection.hpp"
@@ -310,6 +311,12 @@ void test_areal()
     TEST_INTERSECTION(issue_861, 1, -1, 1.4715007684573677693e-10);
 #endif
 
+    TEST_INTERSECTION(issue_1229, 0, -1, 0);
+
+    TEST_INTERSECTION(issue_1231, 1, -1, 54.701340543162516);
+
+    TEST_INTERSECTION(issue_1244, 1, -1, 7);
+
     test_one<Polygon, Polygon, Polygon>("buffer_mp1", buffer_mp1[0], buffer_mp1[1],
                 1, 31, 2.271707796);
     test_one<Polygon, Polygon, Polygon>("buffer_mp2", buffer_mp2[0], buffer_mp2[1],
@@ -414,15 +421,9 @@ void test_areal()
 
     TEST_INTERSECTION(mysql_23023665_6, 2, 0, 11.812440191387557);
 
-    // Formation of an interior ring is optional
-    test_one<Polygon, Polygon, Polygon>("mysql_23023665_10",
-        mysql_23023665_10[0], mysql_23023665_10[1],
-        1, optional(), -1, 54.701340543162523);
-
-    // Formation of an interior ring is optional
-    test_one<Polygon, Polygon, Polygon>("mysql_23023665_11",
-        mysql_23023665_11[0], mysql_23023665_11[1],
-        1, optional(), -1, 35.933385462482065);
+    // Formation of an interior ring is optional for these cases
+    TEST_INTERSECTION(mysql_23023665_10, optional(), 1, 54.701340543162523);
+    TEST_INTERSECTION(mysql_23023665_11, optional(), 1, 35.933385462482065);
 
 //    test_one<Polygon, Polygon, Polygon>(
 //        "polygon_pseudo_line",
@@ -686,9 +687,11 @@ void test_all()
     std::string clip = "box(2 2,8 8)";
 
     test_areal_linear<polygon, linestring>();
+#if ! defined(BOOST_GEOMETRY_TEST_ONLY_ONE_ORDER)
+    test_areal_linear<polygon_ccw, linestring>();
+#endif
 #if ! defined(BOOST_GEOMETRY_TEST_ONLY_ONE_TYPE)
     test_areal_linear<polygon_open, linestring>();
-    test_areal_linear<polygon_ccw, linestring>();
     test_areal_linear<polygon_ccw_open, linestring>();
 #endif
 
@@ -697,8 +700,10 @@ void test_all()
     // Test polygons clockwise and counter clockwise
     test_areal<polygon>();
 
-#if ! defined(BOOST_GEOMETRY_TEST_ONLY_ONE_TYPE)
+#if ! defined(BOOST_GEOMETRY_TEST_ONLY_ONE_ORDER)
     test_areal<polygon_ccw>();
+#endif
+#if ! defined(BOOST_GEOMETRY_TEST_ONLY_ONE_TYPE)
     test_areal<polygon_open>();
     test_areal<polygon_ccw_open>();
 #endif
@@ -752,7 +757,7 @@ void test_all()
 
     // polygons outputing points
     //test_one<P, polygon, polygon>("ppp1", simplex_normal[0], simplex_normal[1], 1, 7, 5.47363293);
-    
+
     test_point_output<P>();
 
     /*
@@ -826,33 +831,6 @@ void test_rational()
         1, 7, 5.47363293);
 }
 
-template <typename CoordinateType>
-void test_ticket_10868(std::string const& wkt_out)
-{
-    typedef bg::model::point<CoordinateType, 2, bg::cs::cartesian> point_type;
-    typedef bg::model::polygon
-        <
-            point_type, /*ClockWise*/false, /*Closed*/false
-        > polygon_type;
-    typedef bg::model::multi_polygon<polygon_type> multipolygon_type;
-
-    polygon_type polygon1;
-    bg::read_wkt(ticket_10868[0], polygon1);
-    polygon_type polygon2;
-    bg::read_wkt(ticket_10868[1], polygon2);
-
-    multipolygon_type multipolygon_out;
-    bg::intersection(polygon1, polygon2, multipolygon_out);
-    std::stringstream stream;
-    stream << bg::wkt(multipolygon_out);
-
-    BOOST_CHECK_EQUAL(stream.str(), wkt_out);
-
-    test_one<polygon_type, polygon_type, polygon_type>("ticket_10868",
-        ticket_10868[0], ticket_10868[1],
-        1, 7, 20266195244586.0);
-}
-
 int test_main(int, char* [])
 {
     BoostGeometryWriteTestConfiguration();
@@ -869,21 +847,6 @@ int test_main(int, char* [])
     test_rational<bg::model::d2::point_xy<boost::rational<int> > >();
 #endif
 
-#if defined(BOOST_GEOMETRY_TEST_FAILURES)
-    // ticket #10868 still fails for 32-bit integers
-    test_ticket_10868<int32_t>("MULTIPOLYGON(((33520458 6878575,33480192 14931538,31446819 18947953,30772384 19615678,30101303 19612322,30114725 16928001,33520458 6878575)))");
-
-#if !defined(BOOST_NO_INT64_T) || defined(BOOST_HAS_MS_INT64)
-    test_ticket_10868<int64_t>("MULTIPOLYGON(((33520458 6878575,33480192 14931538,31446819 18947953,30772384 19615678,30101303 19612322,30114725 16928001,33520458 6878575)))");
-#endif
-
-    if (BOOST_GEOMETRY_CONDITION(sizeof(long) * CHAR_BIT >= 64))
-    {
-        test_ticket_10868<long>("MULTIPOLYGON(((33520458 6878575,33480192 14931538,31446819 18947953,30772384 19615678,30101303 19612322,30114725 16928001,33520458 6878575)))");
-    }
-
-    test_ticket_10868<long long>("MULTIPOLYGON(((33520458 6878575,33480192 14931538,31446819 18947953,30772384 19615678,30101303 19612322,30114725 16928001,33520458 6878575)))");
-#endif
 #endif
 
 #if defined(BOOST_GEOMETRY_TEST_FAILURES)

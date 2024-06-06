@@ -1,9 +1,11 @@
 //
-// Copyright (c) 2019-2023 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
+// Copyright (c) 2019-2024 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //
+
+#include <boost/mysql/any_address.hpp>
 
 #include <boost/asio/error.hpp>
 #include <boost/asio/spawn.hpp>
@@ -14,46 +16,65 @@
 #include "test_common/netfun_helpers.hpp"
 #include "test_integration/streams.hpp"
 
-using namespace boost::mysql::test;
-
-namespace {
-
 // Coroutines test async without diagnostics overloads
-struct async_coroutine_maker
+
+namespace boost {
+namespace mysql {
+namespace test {
+
+template <class Base>
+class async_coroutine_base : public Base
 {
-    static constexpr const char* name() { return "async_coroutines"; }
+protected:
+    using conn_type = typename Base::conn_type;
+    using base_type = Base;
 
-    template <class Signature>
-    struct type;
+    template <class R, class... Args>
+    using pmem_t = R (conn_type::*)(Args..., boost::asio::yield_context&&);
 
-    template <class R, class Obj, class... Args>
-    struct type<network_result<R>(Obj&, Args...)>
+    template <class R, class... Args>
+    network_result<R> fn_impl(pmem_t<R, Args...> p, Args... args)
     {
-        using signature = std::function<network_result<R>(Obj&, Args...)>;
-        using async_sig = R (Obj::*)(Args..., boost::asio::yield_context&&);
+        auto res = create_initial_netresult<R>(false);
+        boost::asio::spawn(
+            this->conn().get_executor(),
+            [&](boost::asio::yield_context yield) {
+                invoke_and_assign(res, p, this->conn(), std::forward<Args>(args)..., yield[res.err]);
+            },
+            &rethrow_on_failure
+        );
+        run_until_completion(this->conn().get_executor());
+        return res;
+    }
 
-        static signature call(async_sig fn)
-        {
-            return [fn](Obj& obj, Args... args) {
-                auto res = create_initial_netresult<R>(false);
-                boost::asio::spawn(
-                    obj.get_executor(),
-                    [&](boost::asio::yield_context yield) {
-                        invoke_and_assign(res, fn, obj, std::forward<Args>(args)..., yield[res.err]);
-                    },
-                    &rethrow_on_failure
-                );
-                run_until_completion(obj.get_executor());
-                return res;
-            };
-        }
-    };
+public:
+    using Base::Base;
+    static constexpr const char* name() noexcept { return "async_coroutines"; }
 };
 
-}  // namespace
+template <class Stream>
+class async_coroutine_connection : public async_coroutine_base<connection_base<Stream>>
+{
+    using base_type = async_coroutine_base<connection_base<Stream>>;
+
+public:
+    BOOST_MYSQL_TEST_IMPLEMENT_ASYNC()
+};
+
+class any_async_coroutine_connection : public async_coroutine_base<any_connection_base>
+{
+    using base_type = async_coroutine_base<any_connection_base>;
+
+public:
+    BOOST_MYSQL_TEST_IMPLEMENT_ASYNC_ANY()
+};
+
+}  // namespace test
+}  // namespace mysql
+}  // namespace boost
 
 void boost::mysql::test::add_async_coroutines(std::vector<er_network_variant*>& output)
 {
-    static auto tcp = create_async_variant<tcp_socket, async_coroutine_maker>();
-    output.push_back(&tcp);
+    add_variant<async_coroutine_connection<tcp_socket>>(output);
+    add_variant_any<address_type::host_and_port, any_async_coroutine_connection>(output);
 }

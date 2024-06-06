@@ -19,6 +19,26 @@ const bool test_iso_8859_8 =
   hasWinCodepage(28598);
 #endif
 
+#if defined(BOOST_LOCALE_WITH_ICONV)
+// Reproduce issue #206 to detect faulty IConv
+static bool isFaultyIconv()
+{
+    namespace blc = boost::locale::conv;
+    auto from_utf = blc::detail::make_utf_decoder<char>("ISO-2022-CN", blc::skip, blc::detail::conv_backend::IConv);
+    try {
+        from_utf->convert("实");
+    } catch(const std::runtime_error& e) {                                         // LCOV_EXCL_LINE
+        return std::string(e.what()).find("IConv is faulty") != std::string::npos; // LCOV_EXCL_LINE
+    }
+    return false;
+}
+#else
+constexpr bool isFaultyIconv()
+{
+    return false;
+}
+#endif
+
 constexpr boost::locale::conv::detail::conv_backend all_conv_backends[] = {
 #ifdef BOOST_LOCALE_WITH_ICONV
   boost::locale::conv::detail::conv_backend::IConv,
@@ -49,10 +69,13 @@ template<typename Char>
 void test_to_utf_for_impls(const std::string& source,
                            const std::basic_string<Char>& target,
                            const std::string& encoding,
-                           const bool expectSuccess = true)
+                           const bool expectSuccess = true,
+                           const bool test_default = true)
 {
-    boost::locale::conv::utf_encoder<Char> conv(encoding);
-    TEST_EQ(conv(source), target);
+    if(test_default) {
+        boost::locale::conv::utf_encoder<Char> conv(encoding);
+        TEST_EQ(conv(source), target);
+    }
     for(const auto impl : all_conv_backends) {
         std::cout << "----- " << impl << '\n';
         using boost::locale::conv::invalid_charset_error;
@@ -61,7 +84,8 @@ void test_to_utf_for_impls(const std::string& source,
               boost::locale::conv::detail::make_utf_encoder<Char>(encoding, boost::locale::conv::skip, impl);
             TEST_EQ(convPtr->convert(source), target);
         } catch(invalid_charset_error&) {
-            continue; // LCOV_EXCL_LINE
+            std::cout << "--- Charset not supported\n"; // LCOV_EXCL_LINE
+            continue;                                   // LCOV_EXCL_LINE
         }
         if(!expectSuccess) {
             auto convPtr =
@@ -83,10 +107,13 @@ template<typename Char>
 void test_from_utf_for_impls(const std::basic_string<Char>& source,
                              const std::string& target,
                              const std::string& encoding,
-                             const bool expectSuccess = true)
+                             const bool expectSuccess = true,
+                             const bool test_default = true)
 {
-    boost::locale::conv::utf_decoder<Char> conv(encoding);
-    TEST_EQ(conv(source), target);
+    if(test_default) {
+        boost::locale::conv::utf_decoder<Char> conv(encoding);
+        TEST_EQ(conv(source), target);
+    }
     for(const auto impl : all_conv_backends) {
         std::cout << "----- " << impl << '\n';
         using boost::locale::conv::invalid_charset_error;
@@ -95,7 +122,8 @@ void test_from_utf_for_impls(const std::basic_string<Char>& source,
               boost::locale::conv::detail::make_utf_decoder<Char>(encoding, boost::locale::conv::skip, impl);
             TEST_EQ(convPtr->convert(source), target);
         } catch(invalid_charset_error&) {
-            continue; // LCOV_EXCL_LINE
+            std::cout << "--- Charset not supported\n"; // LCOV_EXCL_LINE
+            continue;                                   // LCOV_EXCL_LINE
         }
         if(!expectSuccess) {
             auto convPtr =
@@ -114,18 +142,23 @@ void test_from_utf_for_impls(const std::basic_string<Char>& source,
 }
 
 template<typename Char>
-void test_to_from_utf(std::string source, std::basic_string<Char> target, std::string encoding)
+void test_to_from_utf(const std::string& source,
+                      const std::basic_string<Char>& target,
+                      const std::string& encoding,
+                      const bool test_default = true)
 {
     std::cout << "-- " << encoding << std::endl;
 
-    TEST_EQ(boost::locale::conv::to_utf<Char>(source, encoding), target);
-    TEST_EQ(boost::locale::conv::from_utf<Char>(target, encoding), source);
-    test_to_utf_for_impls(source, target, encoding);
-    test_from_utf_for_impls(target, source, encoding);
+    if(test_default) {
+        TEST_EQ(boost::locale::conv::to_utf<Char>(source, encoding), target);
+        TEST_EQ(boost::locale::conv::from_utf<Char>(target, encoding), source);
+    }
+    test_to_utf_for_impls(source, target, encoding, true, test_default);
+    test_from_utf_for_impls(target, source, encoding, true, test_default);
 }
 
 template<typename Char>
-void test_error_to_utf(std::string source, std::basic_string<Char> target, std::string encoding)
+void test_error_to_utf(const std::string& source, const std::basic_string<Char>& target, const std::string& encoding)
 {
     using boost::locale::conv::to_utf;
     using boost::locale::conv::stop;
@@ -146,7 +179,7 @@ void test_error_to_utf(std::string source, std::basic_string<Char> target, std::
 }
 
 template<typename Char>
-void test_error_from_utf(std::basic_string<Char> source, std::string target, std::string encoding)
+void test_error_from_utf(const std::basic_string<Char>& source, const std::string& target, const std::string& encoding)
 {
     using boost::locale::conv::from_utf;
     using boost::locale::conv::stop;
@@ -211,16 +244,16 @@ struct utfutf;
 #    pragma warning(push)
 #    pragma warning(disable : 4309) // narrowing static_cast warning
 #endif
-template<>
-struct utfutf<char, 1> {
-    static const char* ok() { return "grüßen"; }
-    static const char* bad()
+template<typename U8Char>
+struct utfutf<U8Char, 1> {
+    static const U8Char* ok() { return reinterpret_cast<const U8Char*>("grüßen"); }
+    static const U8Char* bad()
     {
-        return "gr\xFF"
-               "üßen";
+        return reinterpret_cast<const U8Char*>("gr\xFF"
+                                               "üßen");
         // split into 2 to make SunCC happy
     }
-    static char bad_char() { return static_cast<char>(0xFF); }
+    static U8Char bad_char() { return static_cast<U8Char>(0xFF); }
 };
 
 template<>
@@ -305,19 +338,30 @@ void test_utf_for()
     } catch(const invalid_charset_error&) { // LCOV_EXCL_LINE
         std::cout << "--- not supported\n"; // LCOV_EXCL_LINE
     }
+    if(!isFaultyIconv()) {
+        // Testing a codepage which may crash with IConv on macOS, see issue #196
+        test_to_from_utf<Char>("\xa1\xad\xa1\xad", utf<Char>("……"), "gbk", false);
+        // This might cause a bogus E2BIG on macOS, see issue #206
+        test_to_from_utf<Char>("\x1b\x24\x29\x41\x0e\x4a\x35\xf", utf<Char>("实"), "ISO-2022-CN", false);
+    }
 
     std::cout << "- Testing correct invalid bytes skipping\n";
     {
         std::cout << "-- UTF-8" << std::endl;
 
-        // At start
+        std::cout << "--- At start single" << std::endl;
         test_error_to_utf<Char>("\xFFgrüßen", utf<Char>("grüßen"), "UTF-8");
+        std::cout << "--- At start multiple" << std::endl;
         test_error_to_utf<Char>("\xFF\xFFgrüßen", utf<Char>("grüßen"), "UTF-8");
-        // Middle
+
+        std::cout << "--- At middle single" << std::endl;
         test_error_to_utf<Char>("g\xFFrüßen", utf<Char>("grüßen"), "UTF-8");
+        std::cout << "--- At middle multiple" << std::endl;
         test_error_to_utf<Char>("g\xFF\xFF\xFFrüßen", utf<Char>("grüßen"), "UTF-8");
-        // End
+
+        std::cout << "--- At end single" << std::endl;
         test_error_to_utf<Char>("grüßen\xFF", utf<Char>("grüßen"), "UTF-8");
+        std::cout << "--- At end multiple" << std::endl;
         test_error_to_utf<Char>("grüßen\xFF\xFF", utf<Char>("grüßen"), "UTF-8");
 
         try {
@@ -338,16 +382,21 @@ void test_utf_for()
         } catch(const invalid_charset_error&) { // LCOV_EXCL_LINE
             std::cout << "--- not supported\n"; // LCOV_EXCL_LINE
         }
-        std::cout << "-- Error for encoding at start, middle and end" << std::endl;
+        std::cout << "-- Error for encoding at start" << std::endl;
         test_error_from_utf<Char>(utf<Char>("שלום hello"), " hello", "ISO8859-1");
+        std::cout << "-- Error for encoding at  middle and end" << std::endl;
         test_error_from_utf<Char>(utf<Char>("hello שלום world"), "hello  world", "ISO8859-1");
+        std::cout << "-- Error for encoding at end" << std::endl;
         test_error_from_utf<Char>(utf<Char>("hello שלום"), "hello ", "ISO8859-1");
-        std::cout << "-- Error for decoding" << std::endl;
+        std::cout << "-- Error for decoding to UTF-8" << std::endl;
         test_error_from_utf<Char>(utfutf<Char>::bad(), utfutf<char>::ok(), "UTF-8");
+        std::cout << "-- Error for decoding to Latin1" << std::endl;
         test_error_from_utf<Char>(utfutf<Char>::bad(), to<char>(utfutf<char>::ok()), "Latin1");
-        std::cout << "-- Error decoding string of only invalid chars" << std::endl;
+
         const std::basic_string<Char> onlyInvalidUtf(2, utfutf<Char>::bad_char());
+        std::cout << "-- Error decoding string of only invalid chars to UTF-8" << std::endl;
         test_error_from_utf<Char>(onlyInvalidUtf, "", "UTF-8");
+        std::cout << "-- Error decoding string of only invalid chars to Latin1" << std::endl;
         test_error_from_utf<Char>(onlyInvalidUtf, "", "Latin1");
     }
 
@@ -376,6 +425,10 @@ void test_utf_to_utf_for()
     test_from_utf_for_impls(utf<Char>(utf8_string), utf8_string, "UTF-8");
     std::cout << "---- wchar_t\n";
     test_utf_to_utf_for<Char, wchar_t>(utf8_string);
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    std::cout << "---- char8_t\n";
+    test_utf_to_utf_for<Char, char8_t>(utf8_string);
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     std::cout << "---- char16_t\n";
     test_utf_to_utf_for<Char, char16_t>(utf8_string);
@@ -393,6 +446,10 @@ void test_utf_to_utf()
     test_utf_to_utf_for<char>();
     std::cout << "-- wchar_t\n";
     test_utf_to_utf_for<wchar_t>();
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    std::cout << "-- char8_t\n";
+    test_utf_to_utf_for<char8_t>();
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     std::cout << "-- char16_t\n";
     test_utf_to_utf_for<char16_t>();
@@ -459,6 +516,10 @@ void test_latin1_conversions()
     test_latin1_conversions_for<char>();
     std::cout << "-- wchar_t\n";
     test_latin1_conversions_for<wchar_t>();
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    std::cout << "-- char8_t\n";
+    test_latin1_conversions_for<char8_t>();
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
     std::cout << "-- char16_t\n";
     test_latin1_conversions_for<char16_t>();
@@ -592,17 +653,17 @@ void test_main(int /*argc*/, char** /*argv*/)
     test_utf_for<char>();
     std::cout << "  wchar_t" << std::endl;
     test_utf_for<wchar_t>();
+#ifndef BOOST_LOCALE_NO_CXX20_STRING8
+    std::cout << "  char8_t" << std::endl;
+    test_utf_for<char8_t>();
+#endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-    if(backendName == "icu" || backendName == "std") {
-        std::cout << "  char16_t" << std::endl;
-        test_utf_for<char16_t>();
-    }
+    std::cout << "  char16_t" << std::endl;
+    test_utf_for<char16_t>();
 #endif
 #ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-    if(backendName == "icu" || backendName == "std") {
-        std::cout << "  char32_t" << std::endl;
-        test_utf_for<char32_t>();
-    }
+    std::cout << "  char32_t" << std::endl;
+    test_utf_for<char32_t>();
 #endif
 
     test_all_combinations();

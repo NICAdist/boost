@@ -14,6 +14,7 @@
 #include <boost/core/ignore_unused.hpp>
 #include <boost/core/detail/string_view.hpp>
 #include <boost/url/string_view.hpp>
+#include <boost/url/grammar/string_token.hpp>
 
 //[snippet_headers_1
 #include <boost/url.hpp>
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <vector>
 #include <cctype>
 
 //[snippet_headers_3
@@ -62,11 +64,6 @@ using_url_views()
         //[code_urls_parsing_2
         boost::system::result<url_view> r = parse_uri( s );
         //]
-        boost::ignore_unused(r);
-    }
-
-    {
-        boost::system::result<url_view> r = parse_uri( s );
         //[snippet_parsing_3
         url_view u = r.value();
         //]
@@ -91,6 +88,23 @@ using_url_views()
         std::cout << param.key << ": " << param.value << "\n";
     std::cout << "\n";
     //]
+
+    {
+        //[snippet_token_1
+        std::string h = u.host();
+        assert(h == "example.com");
+        //]
+        boost::ignore_unused(h);
+    }
+
+    {
+        //[snippet_token_2
+        std::string h = "host: ";
+        u.host(string_token::append_to(h));
+        assert(h == "host: example.com");
+        //]
+        boost::ignore_unused(h);
+    }
 
     {
         //[snippet_accessing_2a
@@ -195,18 +209,8 @@ using_url_views()
     }
 #endif
     {
-        //[snippet_decoding_5a
-        auto function = [](boost::core::string_view str)
-        {
-            std::cout << str << "\n";
-        };
-        //]
-        (void)function;
-    }
-
-    {
         //[snippet_compound_elements_1
-        segments_view segs = u.segments();
+        segments_encoded_view segs = u.encoded_segments();
         for( auto v : segs )
         {
             std::cout << v << "\n";
@@ -216,24 +220,28 @@ using_url_views()
 
     {
         //[snippet_encoded_compound_elements_1
-        segments_view segs = u.segments();
+        segments_encoded_view segs = u.encoded_segments();
 
-        for( auto v : segs )
+        for( pct_string_view v : segs )
         {
-            std::cout << v << "\n";
+            decode_view dv = *v;
+            std::cout << dv << "\n";
         }
         //]
     }
 
     {
         //[snippet_encoded_compound_elements_2
-        params_view params_ref = u.params();
+        params_encoded_view params_ref = u.encoded_params();
 
         for( auto v : params_ref )
         {
+            decode_view dk(v.key);
+            decode_view dv(v.value);
+
             std::cout <<
-                "key = " << v.key <<
-                ", value = " << v.value << "\n";
+                "key = " << dk <<
+                ", value = " << dv << "\n";
         }
         //]
     }
@@ -1521,9 +1529,11 @@ normalizing()
         //[snippet_normalizing_3
         url_view u1("https://www.boost.org/index.html");
         url u2("https://www.boost.org/doc/../index.html");
+        assert(u1.buffer() != u2.buffer());
         assert(u1 == u2);
         u2.normalize();
         assert(u1.buffer() == u2.buffer());
+        assert(u1 == u2);
         //]
     }
 
