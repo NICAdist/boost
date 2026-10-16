@@ -13,38 +13,57 @@ deps = [
     'libs/assert',
     'libs/beast',
     'libs/bind',
+    'libs/callable_traits',
     'libs/chrono',
     'libs/circular_buffer',
+    'libs/compat',
     'libs/concept_check',
     'libs/config',
     'libs/container',
+    'libs/container_hash',
+    'libs/context',
+    'libs/conversion',
     'libs/core',
     'libs/date_time',
+    'libs/describe',
     'libs/detail',
+    'libs/endian',
     'libs/exception',
     'libs/function',
+    'libs/function_types',
+    'libs/functional',
+    'libs/fusion',
     'libs/headers',
     'libs/integer',
     'libs/intrusive',
     'libs/io',
     'libs/iterator',
-    'libs/leaf',
+    'libs/lexical_cast',
     'libs/mpl',
     'libs/move',
     'libs/mp11',
     'libs/numeric',
+    'libs/numeric/conversion',
     'libs/optional',
+    'libs/pool',
     'libs/predef',
     'libs/preprocessor',
     'libs/range',
     'libs/ratio',
+    'libs/regex',
     'libs/smart_ptr',
     'libs/static_assert',
+    'libs/static_string',
     'libs/system',
     'libs/test',
     'libs/thread',
     'libs/throw_exception',
+    'libs/tokenizer',
+    'libs/tuple',
+    'libs/typeof',
     'libs/type_traits',
+    'libs/unordered',
+    'libs/url',
     'libs/utility',
     'libs/variant2',
     'libs/winapi',
@@ -90,7 +109,7 @@ def format_b2_args(**kwargs):
     return res
 
 
-def linux_build_steps(image, **kwargs):
+def linux_build_steps(image, privileged, **kwargs):
     args = format_b2_args(**kwargs)
     return [
         {
@@ -112,7 +131,9 @@ def linux_build_steps(image, **kwargs):
         {
             "name": "test",
             "image": image,
+            "privileged" : privileged,
             "commands" : [
+                "echo 0 | sudo tee /proc/sys/kernel/randomize_va_space" if privileged else "echo",
                 "cd boost/libs/cobalt",
                 "../../b2 test -j8 " + args
             ]
@@ -154,6 +175,7 @@ def linux(
         name,
         branch,
         image,
+        privileged = False,
         **kwargs):
 
     return {
@@ -165,7 +187,7 @@ def linux(
             "os": "linux",
             "arch": "amd64"
         },
-        "steps": git_boost_steps(branch) + linux_build_steps(image, **kwargs)
+        "steps": git_boost_steps(branch) + linux_build_steps(image, privileged, **kwargs)
     }
 
 
@@ -194,21 +216,23 @@ def main(ctx):
         branch = 'develop'
 
     return [
-        linux("gcc-11",                 branch, "docker.io/library/gcc:11",  variant="release", cxxstd="20"),
-        linux("gcc-12",                 branch, "docker.io/library/gcc:12.3",  variant="release", cxxstd="20"),
-        linux("gcc-13",                 branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20"),
-        linux("gcc-13 (asan)",          branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", debug_symbols="on", address_sanitizer="on"),
-        linux("gcc-13 (usan)",          branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", debug_symbols="on", undefined_sanitizer="on"),
-        linux("gcc-13 (tsan)",          branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", debug_symbols="on", thread_sanitizer="on"),
-        linux("gcc-13 (io_context)",    branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", **{'boost.cobalt.executor': 'use_io_context'}),
-        linux("gcc-13 (container.pmr)", branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'boost-container'}),
-        linux("gcc-13 (no pmr)",        branch, "docker.io/library/gcc:13",  variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'no'}),
-        linux("clang",                  branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20"),
-        linux("clang (container.pmr)",  branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'boost-container'}),
-        linux("clang (no pmr)",         branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'no'}),
-        linux("clang (asan)",           branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20", debug_symbols="on", address_sanitizer="on"),
-        linux("clang (usan)",           branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20", debug_symbols="on", undefined_sanitizer="on"),
-        linux("clang (tsan)",           branch, "docker.io/silkeh/clang", toolset='clang', variant="release", cxxstd="20", debug_symbols="on",  thread_sanitizer="on"),
+        linux("gcc-11",                 branch, "docker.io/library/gcc:11",   variant="release", cxxstd="20"),
+        linux("gcc-12",                 branch, "docker.io/library/gcc:12.3", variant="release", cxxstd="20"),
+        linux("gcc-13",                 branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20"),
+        linux("gcc-13 (asan)",          branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20", debug_symbols="on", address_sanitizer="on"),
+        linux("gcc-13 (usan)",          branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20", debug_symbols="on", undefined_sanitizer="on"),
+        linux("gcc-13 (io_context)",    branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20", **{'boost.cobalt.executor': 'use_io_context'}),
+        linux("gcc-13 (container.pmr)", branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'boost-container'}),
+        linux("gcc-13 (no pmr)",        branch, "docker.io/library/gcc:13",   variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'no'}),
+        linux("clang",                  branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20"),
+        linux("clang (container.pmr)",  branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'boost-container'}),
+        linux("clang (no pmr)",         branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20", **{'boost.cobalt.pmr': 'no'}),
+        linux("clang (asan)",           branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20", debug_symbols="on",  address_sanitizer="on"),
+        linux("clang (usan)",           branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20", debug_symbols="on",  undefined_sanitizer="on"),
+        linux("clang (tsan)",           branch, "cppalliance/droneubuntu2404:1", privileged=True, toolset='clang', variant="release", cxxstd="20", debug_symbols="on",  thread_sanitizer="on"),
         windows("msvc-14.3 (x64)",      branch, "cppalliance/dronevs2022:latest", variant="release", cxxstd="20", address_model="64"),
-        windows("msvc-14.3 (x32)",      branch, "cppalliance/dronevs2022:latest", variant="release", cxxstd="20", address_model="32")
+        windows("msvc-14.3 (x32)",      branch, "cppalliance/dronevs2022:latest", variant="release", cxxstd="20", address_model="32"),
+        windows("msvc-14.5 (x64)",      branch, "cppalliance/dronevs2026:latest", variant="release", cxxstd="20", address_model="64"),
+        windows("msvc-14.5 (x32)",      branch, "cppalliance/dronevs2026:latest", variant="release", cxxstd="20", address_model="32"),
+        windows("clang-win",            branch, "cppalliance/dronevs2026:latest", variant="release", cxxstd="20", toolset='clang-win')
     ]

@@ -24,11 +24,6 @@ jobs:
             cxxstd: "20,2b"
             os: ubuntu-22.04
             install: g++-12
-          - toolset: gcc-13
-            cxxstd: "20,2b"
-            os: ubuntu-latest
-            container: ubuntu:23.04
-            install: g++-13
           - toolset: clang
             compiler: clang++-14
             cxxstd: "20,2b"
@@ -54,6 +49,7 @@ jobs:
             cxxstd: "20,2b"
             os: macos-13
             stdlib: libc++
+            cobalt_pmr: boost-container
 
     runs-on: ${{matrix.os}}
     container: ${{matrix.container}}
@@ -97,9 +93,14 @@ jobs:
           cp -r $GITHUB_WORKSPACE/* libs/$LIBRARY
           git submodule update --init tools/boostdep
           python3 tools/boostdep/depinst/depinst.py --git_args "--jobs 3" $LIBRARY
+          
           git submodule update --init libs/test
-          # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
           
           ./bootstrap.sh
@@ -125,7 +126,7 @@ jobs:
 #          - toolset: msvc-14.2
 #            cxxstd: "20,latest"
 #            addrmd: 32,64
-#            os: windows-2019
+#            os: windows-2022
           - toolset: msvc-14.3
             cxxstd: "20,latest"
             addrmd: 32,64
@@ -137,7 +138,7 @@ jobs:
           - toolset: gcc
             cxxstd: "2a"
             addrmd: 64
-            os: windows-2019
+            os: windows-2022
 
     runs-on: ${{matrix.os}}
 
@@ -165,7 +166,12 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" %LIBRARY%
           git submodule update --init libs/test
           # temporary workaround, 
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
           cmd /c bootstrap
           b2 -d0 headers
@@ -183,12 +189,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             shared: OFF
+            boost-container: 0
           - os: ubuntu-22.04
             shared: ON
+            boost-container: 0
           - os: macos-13
             shared: OFF
+            boost-container: 1
           - os: macos-13
             shared: ON
+            boost-container: 1
 
     runs-on: ${{matrix.os}}
 
@@ -221,14 +231,19 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" $LIBRARY
           git submodule update --init libs/test
           # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
       - name: Use library with add_subdirectory
         run: |
           cd ../boost-root/libs/$LIBRARY/test/cmake_subdir_test
           mkdir __build__ && cd __build__
-          cmake -DBUILD_SHARED_LIBS=${{matrix.shared}} ..
+          cmake -DBUILD_SHARED_LIBS=${{matrix.shared}} -DBOOST_COBALT_USE_BOOST_CONTAINER=${{matrix.boost-container}}  ..
           cmake --build .
           ctest --output-on-failure --no-tests=error
 
@@ -239,12 +254,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             shared: OFF
+            boost-container: 0
           - os: ubuntu-22.04
             shared: ON
+            boost-container: 0
           - os: macos-13
             shared: OFF
+            boost-container: 1
           - os: macos-13
             shared: ON
+            boost-container: 1
 
     runs-on: ${{matrix.os}}
 
@@ -277,7 +296,12 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" $LIBRARY
           git submodule update --init libs/test
           # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
 
@@ -285,7 +309,7 @@ jobs:
         run: |
           cd ../boost-root
           mkdir __build__ && cd __build__
-          cmake -DBOOST_INCLUDE_LIBRARIES=$LIBRARY -DCMAKE_INSTALL_PREFIX=~/.local -DBUILD_SHARED_LIBS=${{matrix.shared}} ..
+          cmake -DBOOST_INCLUDE_LIBRARIES=$LIBRARY -DCMAKE_INSTALL_PREFIX=~/.local -DBUILD_SHARED_LIBS=${{matrix.shared}} -DBOOST_COBALT_USE_BOOST_CONTAINER=${{matrix.boost-container}}  ..
 
       - name: Build
         run: |
@@ -312,12 +336,16 @@ jobs:
         include:
           - os: ubuntu-22.04
             shared: OFF
+            boost-container: 0
           - os: ubuntu-22.04
             shared: ON
+            boost-container: 0
           - os: macos-13
             shared: OFF
+            boost-container: 1
           - os: macos-13
             shared: ON
+            boost-container: 1
 
     runs-on: ${{matrix.os}}
 
@@ -350,14 +378,19 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" $LIBRARY
           git submodule update --init libs/test
           # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
       - name: Configure
         run: |
           cd ../boost-root
           mkdir __build__ && cd __build__
-          cmake -DBOOST_INCLUDE_LIBRARIES=$LIBRARY -DBUILD_TESTING=ON -DBUILD_SHARED_LIBS=${{matrix.shared}} ..
+          cmake -DBOOST_INCLUDE_LIBRARIES=$LIBRARY -DBUILD_TESTING=ON -DBOOST_COBALT_USE_BOOST_CONTAINER=${{matrix.boost-container}} -DBUILD_SHARED_LIBS=${{matrix.shared}} ..
 
       - name: Build tests
         run: |
@@ -403,7 +436,12 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" %LIBRARY%
           git submodule update --init libs/test
           # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
       - name: Use library with add_subdirectory (Debug)
@@ -458,7 +496,12 @@ jobs:
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" %LIBRARY%
           git submodule update --init libs/test
           # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
       - name: Configure
@@ -531,9 +574,14 @@ jobs:
           xcopy /s /e /q %GITHUB_WORKSPACE% libs\%LIBRARY%\
           git submodule update --init tools/boostdep
           python tools/boostdep/depinst/depinst.py --git_args "--jobs 3" %LIBRARY%
+          
           git submodule update --init libs/test
-          # Temporary workaround
+          git submodule update --init libs/callable_traits
+          git submodule update --init libs/context
           git submodule update --init libs/chrono
+          git submodule update --init libs/endian
+          git submodule update --init libs/url
+          git submodule update --init libs/static_string
           git submodule update --init libs/ratio
 
       - name: Configure

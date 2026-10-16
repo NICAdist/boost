@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
+// Copyright (c) 2019-2025 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,8 +9,11 @@
 #define BOOST_MYSQL_IMPL_INTERNAL_CONNECTION_POOL_INTERNAL_POOL_PARAMS_HPP
 
 #include <boost/mysql/any_connection.hpp>
+#include <boost/mysql/character_set.hpp>
 #include <boost/mysql/connect_params.hpp>
+#include <boost/mysql/defaults.hpp>
 #include <boost/mysql/handshake_params.hpp>
+#include <boost/mysql/pipeline.hpp>
 #include <boost/mysql/pool_params.hpp>
 #include <boost/mysql/ssl_mode.hpp>
 
@@ -31,20 +34,22 @@ namespace detail {
 struct internal_pool_params
 {
     connect_params connect_config;
+    pipeline_request reset_pipeline;
     optional<asio::ssl::context> ssl_ctx;
-    std::size_t initial_read_buffer_size;
+    std::size_t initial_buffer_size;
     std::size_t initial_size;
     std::size_t max_size;
     std::chrono::steady_clock::duration connect_timeout;
     std::chrono::steady_clock::duration ping_timeout;
     std::chrono::steady_clock::duration retry_interval;
     std::chrono::steady_clock::duration ping_interval;
+    bool thread_safe;
 
     any_connection_params make_ctor_params() noexcept
     {
         any_connection_params res;
         res.ssl_context = ssl_ctx.get_ptr();
-        res.initial_read_buffer_size = initial_read_buffer_size;
+        res.initial_buffer_size = initial_buffer_size;
         return res;
     }
 };
@@ -82,17 +87,31 @@ inline internal_pool_params make_internal_pool_params(pool_params&& params)
     connect_prms.database = std::move(params.database);
     connect_prms.ssl = params.ssl;
     connect_prms.multi_queries = params.multi_queries;
+    if (params.charset_strategy.type() == pool_charset_strategy_type::use_server_default)
+    {
+        // Intentionally invalid, to force the server use its default.
+        // We can't allow otherwise because resetting sets the collation back to the default.
+        connect_prms.connection_collation = invalid_collation_id;
+        connect_prms.server_default_charset = params.charset_strategy.server_default_charset();
+    }
+
+    pipeline_request reset_pipe;
+    reset_pipe.add_reset_connection();
+    if (params.charset_strategy.type() == pool_charset_strategy_type::set_to_utf8mb4)
+        reset_pipe.add_set_character_set(utf8mb4_charset);
 
     return {
         std::move(connect_prms),
+        std::move(reset_pipe),
         std::move(params.ssl_ctx),
-        params.initial_read_buffer_size,
+        params.initial_buffer_size,
         params.initial_size,
         params.max_size,
         params.connect_timeout,
         params.ping_timeout,
         params.retry_interval,
         params.ping_interval,
+        params.thread_safe,
     };
 }
 

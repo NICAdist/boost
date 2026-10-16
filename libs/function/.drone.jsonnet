@@ -32,7 +32,8 @@ local linux_pipeline(name, image, environment, packages = "", sources = [], arch
             commands:
             [
                 'set -e',
-                'wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -',
+                'uname -a',
+                'echo $DRONE_STAGE_MACHINE',
             ] +
             (if sources != [] then [ ('apt-add-repository "' + source + '"') for source in sources ] else []) +
             (if packages != "" then [ 'apt-get update', 'apt-get -y install ' + packages ] else []) +
@@ -106,7 +107,7 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
     linux_pipeline(
         "Linux 16.04 GCC 4.8 32/64",
         "cppalliance/droneubuntu1604:1",
-        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11', ADDRMD: '32,64' },
+        { TOOLSET: 'gcc', COMPILER: 'g++-4.8', CXXSTD: '11', ADDRMD: '32,64' },
         "g++-4.8-multilib",
     ),
 
@@ -150,16 +151,23 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
     ),
 
     linux_pipeline(
-        "Linux 20.04 GCC 9* ARM64",
+        "Linux 20.04 GCC 9* ARM64 UBSAN",
         "cppalliance/droneubuntu2004:multiarch",
-        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11,14,17,2a' },
+        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11,14,17,2a' } + ubsan,
         arch="arm64",
     ),
 
     linux_pipeline(
-        "Linux 20.04 GCC 9* S390x",
+        "Linux 20.04 GCC 9* ARM64 ASAN",
         "cppalliance/droneubuntu2004:multiarch",
-        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11,14,17,2a' },
+        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11,14,17,2a' } + asan,
+        arch="arm64",
+    ),
+
+    linux_pipeline(
+        "Linux 20.04 GCC 9* S390x UBSAN",
+        "cppalliance/droneubuntu2004:multiarch",
+        { TOOLSET: 'gcc', COMPILER: 'g++', CXXSTD: '11,14,17,2a' } + ubsan,
         arch="s390x",
     ),
 
@@ -184,31 +192,31 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
     ),
 
     linux_pipeline(
-        "Linux 23.04 GCC 13 32 ASAN",
-        "cppalliance/droneubuntu2304:1",
-        { TOOLSET: 'gcc', COMPILER: 'g++-13', CXXSTD: '11,14,17,20,2b', ADDRMD: '32' } + asan,
+        "Linux 24.04 GCC 13 32/64",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'gcc', COMPILER: 'g++-13', CXXSTD: '11,14,17,20,2b', ADDRMD: '32,64' },
         "g++-13-multilib",
     ),
 
     linux_pipeline(
-        "Linux 23.04 GCC 13 64 ASAN",
-        "cppalliance/droneubuntu2304:1",
-        { TOOLSET: 'gcc', COMPILER: 'g++-13', CXXSTD: '11,14,17,20,2b', ADDRMD: '64' } + asan,
-        "g++-13-multilib",
+        "Linux 24.04 GCC 14 32/64 UBSAN",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'gcc', COMPILER: 'g++-14', CXXSTD: '11,14,17,20,2b', ADDRMD: '32,64' } + ubsan,
+        "g++-14-multilib",
     ),
 
     linux_pipeline(
-        "Linux 23.04 GCC 13 32 UBSAN",
-        "cppalliance/droneubuntu2304:1",
-        { TOOLSET: 'gcc', COMPILER: 'g++-13', CXXSTD: '11,14,17,20,2b', ADDRMD: '32' } + ubsan,
-        "g++-13-multilib",
+        "Linux 24.04 GCC 14 32/64 ASAN",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'gcc', COMPILER: 'g++-14', CXXSTD: '11,14,17,20,2b', ADDRMD: '32,64' } + asan,
+        "g++-14-multilib",
     ),
 
     linux_pipeline(
-        "Linux 23.04 GCC 13 64 UBSAN",
-        "cppalliance/droneubuntu2304:1",
-        { TOOLSET: 'gcc', COMPILER: 'g++-13', CXXSTD: '11,14,17,20,2b', ADDRMD: '64' } + ubsan,
-        "g++-13-multilib",
+        "Linux 25.10 GCC 15 32/64",
+        "cppalliance/droneubuntu2510:1",
+        { TOOLSET: 'gcc', COMPILER: 'g++-15', CXXSTD: '11,14,17,20,23,2c', ADDRMD: '32,64' },
+        "g++-15-multilib",
     ),
 
     linux_pipeline(
@@ -331,24 +339,52 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
     ),
 
     linux_pipeline(
-        "Linux 23.04 Clang 16",
-        "cppalliance/droneubuntu2304:1",
+        "Linux 24.04 Clang 16",
+        "cppalliance/droneubuntu2404:1",
         { TOOLSET: 'clang', COMPILER: 'clang++-16', CXXSTD: '11,14,17,20,2b' },
         "clang-16",
     ),
 
     linux_pipeline(
-        "Linux 23.10 Clang 17 UBSAN",
-        "cppalliance/droneubuntu2310:1",
-        { TOOLSET: 'clang', COMPILER: 'clang++-17', CXXSTD: '11,14,17,20,2b' } + ubsan,
+        "Linux 24.04 Clang 17",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-17', CXXSTD: '11,14,17,20,2b' },
         "clang-17",
     ),
 
     linux_pipeline(
-        "Linux 23.10 Clang 17 ASAN",
-        "cppalliance/droneubuntu2310:1",
-        { TOOLSET: 'clang', COMPILER: 'clang++-17', CXXSTD: '11,14,17,20,2b' } + asan,
-        "clang-17",
+        "Linux 24.04 Clang 18",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-18', CXXSTD: '11,14,17,20,2b' },
+        "clang-18",
+    ),
+
+    linux_pipeline(
+        "Linux 24.04 Clang 19",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-18', CXXSTD: '11,14,17,20,2b' },
+        "clang-18",
+    ),
+
+    linux_pipeline(
+        "Linux 24.04 Clang 20 UBSAN",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-20', CXXSTD: '11,14,17,20,2b' } + ubsan,
+        "clang-20",
+    ),
+
+    linux_pipeline(
+        "Linux 24.04 Clang 20 ASAN",
+        "cppalliance/droneubuntu2404:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-20', CXXSTD: '11,14,17,20,2b' } + asan,
+        "clang-20",
+    ),
+
+    linux_pipeline(
+        "Linux 25.10 Clang 21",
+        "cppalliance/droneubuntu2510:1",
+        { TOOLSET: 'clang', COMPILER: 'clang++-21', CXXSTD: '11,14,17,20,23,2c' },
+        "clang-21",
     ),
 
     macos_pipeline(
@@ -395,5 +431,11 @@ local windows_pipeline(name, image, environment, arch = "amd64") =
         "Windows VS2022 msvc-14.3",
         "cppalliance/dronevs2022:1",
         { TOOLSET: 'msvc-14.3', CXXSTD: '14,17,20,latest' },
+    ),
+
+    windows_pipeline(
+        "Windows VS2026 msvc-14.5",
+        "cppalliance/dronevs2026:1",
+        { TOOLSET: 'msvc-14.5', CXXSTD: '14,17,20,latest' },
     ),
 ]

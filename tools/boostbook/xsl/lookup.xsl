@@ -18,7 +18,14 @@
   <!-- Generate an ID for the entity referenced -->
   <xsl:template name="generate.id">
     <xsl:param name="node" select="."/>
-    <xsl:apply-templates select="$node" mode="generate.id"/>
+    <xsl:choose>
+      <xsl:when test="not(string($node/@id)='')">
+        <xsl:value-of select="$node/@id"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:apply-templates select="$node" mode="generate.id"/>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
   <xsl:template match="*" mode="generate.id">
@@ -151,22 +158,28 @@
   <!-- Build the fully-qualified name of the given node -->
   <xsl:template name="fully-qualified-name">
     <xsl:param name="node"/>
-    <xsl:apply-templates select="$node" mode="fully-qualified-name"/>
+    <xsl:param name="replace-unnamed" select="false()"/>
+    <xsl:apply-templates select="$node" mode="fully-qualified-name">
+      <xsl:with-param name="replace-unnamed" select="$replace-unnamed"/>
+    </xsl:apply-templates>
   </xsl:template>
 
   <!-- Hack to make the node we are building the current node so that the
        ancestor:: syntax will work -->
   <xsl:template match="*" mode="fully-qualified-name">
-    <xsl:param name="is.id" select="false()" />
+    <xsl:param name="is.id" select="false()"/>
+    <xsl:param name="replace-unnamed" select="false()"/>
     <xsl:call-template name="build-fully-qualified-name">
       <xsl:with-param name="is.id" select="$is.id"/>
+      <xsl:with-param name="replace-unnamed" select="$replace-unnamed"/>
     </xsl:call-template>
   </xsl:template>
 
   <!-- The real routine that builds a fully-qualified name for the current
        node. -->
   <xsl:template name="build-fully-qualified-name">
-    <xsl:param name="is.id" select="false()" />
+    <xsl:param name="is.id" select="false()"/>
+    <xsl:param name="replace-unnamed" select="false()"/>
 
     <!-- Determine the set of ancestor namespaces -->
     <xsl:variable name="ancestors"
@@ -177,6 +190,7 @@
     <xsl:for-each select="$ancestors">
       <xsl:apply-templates select="." mode="fast-print-id-part">
         <xsl:with-param name="is.id" select="$is.id"/>
+        <xsl:with-param name="replace-unnamed" select="$replace-unnamed"/>
       </xsl:apply-templates>
       <xsl:choose>
         <xsl:when test="$is.id"><xsl:text>.</xsl:text></xsl:when>
@@ -185,6 +199,7 @@
     </xsl:for-each>
     <xsl:apply-templates select="." mode="fast-print-id-part">
       <xsl:with-param name="is.id" select="$is.id"/>
+      <xsl:with-param name="replace-unnamed" select="$replace-unnamed"/>
     </xsl:apply-templates>
   </xsl:template>
 
@@ -212,9 +227,12 @@
   
   <xsl:template match="*" mode="fast-print-id-part">
     <xsl:param name="is.id"/>
+    <xsl:param name="replace-unnamed" select="false()"/>
     <xsl:choose>
       <xsl:when test="not($is.id)">
-        <xsl:apply-templates select="." mode="print-name"/>
+        <xsl:apply-templates select="." mode="print-name">
+          <xsl:with-param name="replace-unnamed" select="$replace-unnamed"/>
+        </xsl:apply-templates>
       </xsl:when>
       <xsl:when test="$fast-elements[@id=generate-id()]">
         <xsl:value-of select="$fast-elements[@id=generate-id()]/@part-id"/>
@@ -290,7 +308,15 @@
 
   <!-- Print the name of the current node -->
   <xsl:template match="*" mode="print-name">
-    <xsl:value-of select="@name"/>
+    <xsl:param name="replace-unnamed" select="false()"/>
+    <xsl:choose>
+      <xsl:when test="not($replace-unnamed) or not(string(@name)='' or starts-with(string(@name), '@'))">
+        <xsl:value-of select="@name"/>
+      </xsl:when>
+      <xsl:otherwise>
+        <emphasis>[unnamed]</emphasis>
+      </xsl:otherwise>
+    </xsl:choose>
   </xsl:template>
 
   <xsl:template match="template-arg" mode="print-name">
@@ -360,16 +386,33 @@
       </xsl:call-template>
     </xsl:variable>
 
+    <!-- A leading '::' denotes a name rooted at the global namespace.
+         Fully-qualified node names never carry this prefix, so strip it and,
+         when it is present, require an exact match with no extra enclosing
+         qualifiers (i.e. the name is resolved from the global scope). -->
+    <xsl:variable name="absolute" select="starts-with($name, '::')"/>
+    <xsl:variable name="lookup-name">
+      <xsl:choose>
+        <xsl:when test="$absolute">
+          <xsl:value-of select="substring($name, 3)"/>
+        </xsl:when>
+        <xsl:otherwise>
+          <xsl:value-of select="$name"/>
+        </xsl:otherwise>
+      </xsl:choose>
+    </xsl:variable>
+
     <xsl:variable name="leading-chars"
-                  select="string-length($node-name) - string-length($name)"/>
+                  select="string-length($node-name) - string-length($lookup-name)"/>
 
     <!-- Check if this node matches any visible namespace -->
-    <xsl:if test="string-length($node-name) &gt;= string-length($name) and
+    <xsl:if test="string-length($node-name) &gt;= string-length($lookup-name) and
                   substring($node-name, $leading-chars + 1,
-                                        string-length($name)) = $name">
+                                        string-length($lookup-name)) = $lookup-name">
       <xsl:variable name="qualifiers"
                     select="substring($node-name, 1, $leading-chars)"/>
-      <xsl:if test="contains($directives-str, $qualifiers)">
+      <xsl:if test="($absolute and $qualifiers = '') or
+                    (not($absolute) and contains($directives-str, $qualifiers))">
         <xsl:variable name="myid">
           <xsl:call-template name="generate.id">
             <xsl:with-param name="node" select="."/>

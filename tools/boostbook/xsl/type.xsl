@@ -85,7 +85,14 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
     </xsl:if>
     <xsl:call-template name="monospaced">
       <xsl:with-param name="text">
-        <xsl:value-of select="@name"/>
+        <xsl:choose>
+          <xsl:when test="not(string(@name)='' or starts-with(string(@name), '@'))">
+            <xsl:value-of select="@name"/>
+          </xsl:when>
+          <xsl:otherwise>
+            <emphasis>[unnamed]</emphasis>
+          </xsl:otherwise>
+        </xsl:choose>
         <xsl:apply-templates select="specialization"/>
       </xsl:with-param>
     </xsl:call-template>
@@ -262,6 +269,45 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
 
     <xsl:text>&#10;</xsl:text>
     <xsl:choose>
+      <!-- Alias template: render as "template<...> using name = type;" -->
+      <xsl:when test="template">
+        <xsl:call-template name="indent">
+          <xsl:with-param name="indentation" select="$indentation"/>
+        </xsl:call-template>
+        <xsl:apply-templates select="template" mode="reference">
+          <xsl:with-param name="indentation" select="$indentation"/>
+        </xsl:apply-templates>
+        <xsl:text>&#10;</xsl:text>
+        <xsl:call-template name="indent">
+          <xsl:with-param name="indentation" select="$indentation"/>
+        </xsl:call-template>
+        <xsl:call-template name="highlight-keyword">
+          <xsl:with-param name="keyword" select="'using'"/>
+        </xsl:call-template>
+        <xsl:text> </xsl:text>
+        <xsl:call-template name="link-or-anchor">
+          <xsl:with-param name="to" select="$link-to"/>
+          <xsl:with-param name="text" select="$typedef-name"/>
+          <xsl:with-param name="link-type" select="$link-type"/>
+          <xsl:with-param name="highlight" select="true()"/>
+        </xsl:call-template>
+        <xsl:call-template name="highlight-text">
+          <xsl:with-param name="text" select="' = '"/>
+        </xsl:call-template>
+        <xsl:apply-templates select="type/*|type/text()" mode="highlight"/>
+        <xsl:call-template name="highlight-special">
+          <xsl:with-param name="text" select="';'"/>
+        </xsl:call-template>
+        <xsl:if test="$compact and purpose">
+          <xsl:text>  </xsl:text>
+          <xsl:call-template name="highlight-comment">
+            <xsl:with-param name="text">
+              <xsl:text>// </xsl:text>
+              <xsl:apply-templates select="purpose" mode="comment"/>
+            </xsl:with-param>
+          </xsl:call-template>
+        </xsl:if>
+      </xsl:when>
       <!-- Create a vertical ellipsis -->
       <xsl:when test="@name = '...'">
         <xsl:call-template name="indent">
@@ -676,6 +722,11 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
         <!-- Find the length of the type -->
         <xsl:variable name="length">
           <xsl:choose>
+            <!-- Alias templates are rendered on their own lines and do not
+                 participate in column alignment. -->
+            <xsl:when test="$typedef/template">
+              <xsl:value-of select="0"/>
+            </xsl:when>
             <xsl:when test="$typedef/@name != '...'">
               <xsl:choose>
                 <xsl:when test="$want-name">
@@ -1417,6 +1468,9 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
       <xsl:with-param name="indentation" select="$indentation"/>
     </xsl:call-template>
 
+    <!-- Doxygen generates unnamed enums with a name starting with '@' -->
+    <xsl:variable name="has-name" select="not(string(@name)='' or starts-with(string(@name), '@'))"/>
+
     <xsl:choose>
       <!-- When there is a detailed description, we only put the
            declaration in the synopsis and will put detailed documentation
@@ -1434,7 +1488,16 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
               <xsl:with-param name="node" select="."/>
             </xsl:call-template>
           </xsl:with-param>
-          <xsl:with-param name="text" select="string(@name)"/>
+          <xsl:with-param name="text">
+            <xsl:choose>
+              <xsl:when test="$has-name">
+                <xsl:value-of select="@name"/>
+              </xsl:when>
+              <xsl:otherwise>
+                <emphasis>[unnamed]</emphasis>
+              </xsl:otherwise>
+            </xsl:choose>
+          </xsl:with-param>
           <xsl:with-param name="higlhight" select="false()"/>
         </xsl:call-template>
       </xsl:when>
@@ -1462,7 +1525,9 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
           <xsl:with-param name="keyword" select="'enum'"/>
         </xsl:call-template>
 
-        <xsl:text> </xsl:text>
+        <xsl:if test="$has-name">
+          <xsl:text> </xsl:text>
+        </xsl:if>
 
         <xsl:call-template name="anchor">
           <xsl:with-param name="to">
@@ -1470,7 +1535,11 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
               <xsl:with-param name="node" select="."/>
             </xsl:call-template>
           </xsl:with-param>
-          <xsl:with-param name="text" select="@name"/>
+          <xsl:with-param name="text">
+            <xsl:if test="$has-name">
+              <xsl:value-of select="@name"/>
+            </xsl:if>
+          </xsl:with-param>
           <xsl:with-param name="higlhight" select="false()"/>
         </xsl:call-template>
 
@@ -1502,6 +1571,7 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
         <xsl:with-param name="refname">
           <xsl:call-template name="fully-qualified-name">
             <xsl:with-param name="node" select="."/>
+            <xsl:with-param name="replace-unnamed" select="true()"/>
           </xsl:call-template>
         </xsl:with-param>
         <xsl:with-param name="purpose" select="purpose/*|purpose/text()"/>
@@ -1550,7 +1620,13 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
     </xsl:call-template>
 
     <!-- Header -->
-    <xsl:variable name="header" select="concat(' ', @name, ' { ')"/>
+    <xsl:variable name="header">
+      <!-- Doxygen generates unnamed enums with a name starting with '@' -->
+      <xsl:if test="not(string(@name)='' or starts-with(string(@name), '@'))">
+        <xsl:value-of select="concat(' ', @name)"/>
+      </xsl:if>
+      <xsl:text> { </xsl:text>
+    </xsl:variable>
     <xsl:call-template name="highlight-text">
       <xsl:with-param name="text" select="$header"/>
     </xsl:call-template>
@@ -1643,7 +1719,23 @@ Unknown type element "<xsl:value-of select="local-name(.)"/>" in type.display.na
           </xsl:call-template>
         </xsl:when>
         <xsl:otherwise>
-          <xsl:value-of select="$value/attribute::name"/>
+          <xsl:choose>
+            <xsl:when test="$value/attribute::id">
+              <xsl:call-template name="anchor">
+                <xsl:with-param name="to">
+                  <xsl:call-template name="generate.id">
+                    <xsl:with-param name="node" select="$value"/>
+                  </xsl:call-template>
+                </xsl:with-param>
+                <xsl:with-param name="text">
+                  <xsl:value-of select="$value/attribute::name"/>
+                </xsl:with-param>
+              </xsl:call-template>
+            </xsl:when>
+            <xsl:otherwise>
+              <xsl:value-of select="$value/attribute::name"/>
+            </xsl:otherwise>
+          </xsl:choose>
         </xsl:otherwise>
       </xsl:choose>
 

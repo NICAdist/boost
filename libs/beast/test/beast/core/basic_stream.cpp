@@ -656,6 +656,17 @@ public:
             ioc.restart();
         }
 
+        {
+            // non-empty buffer, timeout
+            test_server srv("*", ep, log);
+            stream_type s(ioc);
+            s.socket().connect(srv.local_endpoint());
+            s.expires_after(std::chrono::seconds(0));
+            s.async_write_some(cb, handler(error::timeout, 0));
+            ioc.run();
+            ioc.restart();
+        }
+
         // abandoned operation
         {
             stream_type s(ioc);
@@ -1256,7 +1267,7 @@ public:
                 net::strand<
                     net::io_context::executor_type>,
                 unlimited_rate_policy> stream(std::move(sock));
-            BOOST_STATIC_ASSERT(
+            BOOST_CORE_STATIC_ASSERT(
                 std::is_convertible<
                     decltype(sock)::executor_type,
                     decltype(stream)::executor_type>::value);

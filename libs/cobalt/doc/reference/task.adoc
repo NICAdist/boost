@@ -31,7 +31,7 @@ Otherwise, it'll default to the thread_local executor.
 [#task-allocator]
 
 The memory resource is *NOT* taken from the `thread_local` <<this_thread, get_default_resource>> function,
-but `pmr::get_default_resource(),
+but `pmr::get_default_resource()`,
 unless a `std::allocator_arg` is used in any position followed by a `polymorphic_allocator` argument.
 
 [source, cpp]
@@ -62,6 +62,7 @@ The task promise has the following properties.
 - <<enable_awaitables>>
 - <<enable_await_allocator>>
 - <<enable_await_executor>>
+- <<enable_await_deferred>>
 
 [#use_task]
 === use_task

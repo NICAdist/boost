@@ -2,7 +2,7 @@
 // bind_executor.cpp
 // ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2026 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,26 +17,15 @@
 #include <boost/asio/bind_executor.hpp>
 
 #include <functional>
+#include <boost/asio/inline_executor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include "unit_test.hpp"
 
-#if defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
-# include <boost/asio/deadline_timer.hpp>
-#else // defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
-# include <boost/asio/steady_timer.hpp>
-#endif // defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
-
 using namespace boost::asio;
 namespace bindns = std;
-
-#if defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
-typedef deadline_timer timer;
-namespace chronons = boost::posix_time;
-#else // defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
 typedef steady_timer timer;
 namespace chronons = boost::asio::chrono;
-#endif // defined(BOOST_ASIO_HAS_BOOST_DATE_TIME)
 
 void increment(int* count)
 {
@@ -68,7 +57,7 @@ void bind_executor_to_function_object_test()
       bind_executor(
         ioc2.get_executor(),
         bind_executor(
-          boost::asio::system_executor(),
+          boost::asio::inline_executor(),
           bindns::bind(&increment, &count))));
 
   ioc1.restart();
@@ -184,10 +173,46 @@ void bind_executor_to_completion_token_v2_test()
   BOOST_ASIO_CHECK(count == 1);
 }
 
+void partial_bind_executor_test()
+{
+  io_context ioc1;
+  io_context ioc2;
+
+  int count = 0;
+
+  timer t(ioc1, chronons::seconds(1));
+  t.async_wait(bind_executor(ioc2.get_executor()))(
+      bindns::bind(&increment, &count));
+
+  ioc1.run();
+
+  BOOST_ASIO_CHECK(count == 0);
+
+  ioc2.run();
+
+  BOOST_ASIO_CHECK(count == 1);
+
+  t.expires_after(chronons::seconds(1));
+  t.async_wait()(
+      bind_executor(ioc2.get_executor()))(
+        incrementer_token_v2(&count));
+
+  ioc1.restart();
+  ioc1.run();
+
+  BOOST_ASIO_CHECK(count == 1);
+
+  ioc2.restart();
+  ioc2.run();
+
+  BOOST_ASIO_CHECK(count == 2);
+}
+
 BOOST_ASIO_TEST_SUITE
 (
   "bind_executor",
   BOOST_ASIO_TEST_CASE(bind_executor_to_function_object_test)
   BOOST_ASIO_TEST_CASE(bind_executor_to_completion_token_v1_test)
   BOOST_ASIO_TEST_CASE(bind_executor_to_completion_token_v2_test)
+  BOOST_ASIO_TEST_CASE(partial_bind_executor_test)
 )

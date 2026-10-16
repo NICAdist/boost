@@ -8,35 +8,10 @@ project(cmake_subdir_test LANGUAGES CXX)
 
 add_subdirectory(../.. boostorg/crc)
 
-# `boostdep --brief crc`
-
-set(deps
-
-# Primary dependencies
-
-array
-config
-integer
-type_traits
-
-# Secondary dependencies
-
-assert
-core
-static_assert
-throw_exception
-)
-
-foreach(dep IN LISTS deps)
-
-  add_subdirectory(../../../${dep} boostorg/${dep})
-
-endforeach()
-
 add_executable(quick ../quick.cpp)
 target_link_libraries(quick Boost::crc)
 
 enable_testing()
 add_test(quick quick)
 
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -C $<CONFIG>)
+add_custom_target(check VERBATIM COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -C $<CONFIG>)

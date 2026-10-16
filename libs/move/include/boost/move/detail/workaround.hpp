@@ -61,7 +61,7 @@
 #elif defined(BOOST_MSVC) && (_MSC_VER < 1900 || defined(_DEBUG))
    //"__forceinline" and MSVC seems to have some bugs in old versions and in debug mode
    #define BOOST_MOVE_FORCEINLINE inline
-#elif defined(BOOST_CLANG) || (defined(BOOST_GCC) && ((__GNUC__ <= 5) || defined(__MINGW32__)))
+#elif defined(BOOST_GCC) && (__GNUC__ <= 5)
    //Older GCCs have problems with forceinline
    //Clang can have code bloat issues with forceinline, see
    //https://lists.boost.org/boost-users/2023/04/91445.php and
@@ -147,5 +147,10 @@ template<unsigned> struct static_assert_test {};
 #define BOOST_MOVE_INTRINSIC_CAST BOOST_MOVE_FORCEINLINE
 #endif
 
-#endif   //#ifndef BOOST_MOVE_DETAIL_WORKAROUND_HPP
+#if defined(__has_builtin)
+#if __has_builtin(__builtin_launder)
+   #define BOOST_MOVE_HAS_BUILTIN_LAUNDER
+#endif
+#endif
 
+#endif   //#ifndef BOOST_MOVE_DETAIL_WORKAROUND_HPP

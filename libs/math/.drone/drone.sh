@@ -40,6 +40,10 @@ python tools/boostdep/depinst/depinst.py math
 ./bootstrap.sh
 ./b2 headers
 
+if [[ $(uname) == "Linux" ]]; then
+    echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
+fi
+
 echo '==================================> BEFORE_SCRIPT'
 
 . $DRONE_BUILD_DIR/.drone/before-script.sh
@@ -47,8 +51,8 @@ echo '==================================> BEFORE_SCRIPT'
 echo '==================================> SCRIPT'
 
 echo "using $TOOLSET : : $COMPILER : <cxxflags>-std=$CXXSTD $OPTIONS ;" > ~/user-config.jam
-(cd libs/config/test && ../../../b2 config_info_travis_install toolset=$TOOLSET && ./config_info_travis)
-(cd libs/math/test && ../../../b2 toolset=$TOOLSET $TEST_SUITE define=$DEFINE)
+(cd libs/config/test && ../../../b2 print_config_info print_math_info toolset=$TOOLSET)
+(cd libs/math/test && ../../../b2 -j3 toolset=$TOOLSET $TEST_SUITE)
 
 echo '==================================> AFTER_SUCCESS'
 

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
+// Copyright (c) 2019-2025 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -11,7 +11,6 @@
 #include <boost/mysql/impl/internal/sansio/message_reader.hpp>
 #include <boost/mysql/impl/internal/sansio/read_buffer.hpp>
 
-#include <boost/test/tools/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
@@ -22,6 +21,7 @@
 
 #include "test_common/assert_buffer_equals.hpp"
 #include "test_common/buffer_concat.hpp"
+#include "test_common/printing.hpp"
 #include "test_unit/create_frame.hpp"
 
 using namespace boost::mysql::detail;
@@ -40,8 +40,13 @@ public:
     message_reader reader;
     std::uint8_t seqnum{42};
 
-    reader_fixture(std::vector<std::uint8_t> contents, std::size_t buffsize = 512)
-        : reader(buffsize, 64),  // max frame size is 64
+    reader_fixture(
+        std::vector<std::uint8_t> contents,
+        std::size_t buffsize = 512,
+        std::size_t max_size = static_cast<std::size_t>(-1),
+        std::size_t max_frame_size = 64 // max frame size is 64
+    )
+        : reader(buffsize, max_size, max_frame_size),
           contents_(std::move(contents)),
           buffer_first_(reader.internal_buffer().first())
     {
@@ -59,7 +64,8 @@ public:
     {
         while (!reader.done() && remaining_bytes())
         {
-            reader.prepare_buffer();
+            auto ec = reader.prepare_buffer();
+            BOOST_TEST(ec == error_code());
             std::size_t bytes_to_copy = (std::min)(reader.buffer().size(), contents_.size() - bytes_written_);
             read_bytes(bytes_to_copy);
         }
@@ -122,7 +128,7 @@ BOOST_AUTO_TEST_CASE(parsing_algorithm_success)
          44},
         {"two_frames",
          buffer_builder().add(create_frame(42, u8vec(64, 0x04))).add(create_frame(43, {0x05, 0x06})).build(),
-         concat_copy(u8vec(64, 0x04), {0x05, 0x06}),
+         concat(u8vec(64, 0x04), {0x05, 0x06}),
          44},
         {"two_frames_max_size",
          buffer_builder()
@@ -130,7 +136,7 @@ BOOST_AUTO_TEST_CASE(parsing_algorithm_success)
              .add(create_frame(43, u8vec(64, 0x05)))
              .add(create_empty_frame(44))
              .build(),
-         concat_copy(u8vec(64, 0x04), u8vec(64, 0x05)),
+         concat(u8vec(64, 0x04), u8vec(64, 0x05)),
          45},
         {"three_frames",
          buffer_builder()
@@ -182,7 +188,7 @@ BOOST_AUTO_TEST_CASE(seqnum_overflow)
 
     // all in one
     fix.read_bytes(64 + 4 * 2 + 3);
-    fix.check_message(concat_copy(std::vector<std::uint8_t>(64, 0x04), {0x05, 0x06, 0x07}));
+    fix.check_message(concat(std::vector<std::uint8_t>(64, 0x04), {0x05, 0x06, 0x07}));
     BOOST_TEST(fix.seqnum == 1u);
 
     // Buffer didn't reallocate
@@ -197,7 +203,7 @@ BOOST_AUTO_TEST_CASE(seqnum_mismatch)
         u8vec input;
     } test_cases[] = {
         {"1st_frame", create_frame(1, {0x01, 0x02})},
-        {"2nd_frame", concat_copy(create_frame(42, u8vec(64, 0x04)), create_frame(44, {0x01}))},
+        {"2nd_frame", concat(create_frame(42, u8vec(64, 0x04)), create_frame(44, {0x01}))},
     };
 
     for (const auto& tc : test_cases)
@@ -221,7 +227,7 @@ BOOST_AUTO_TEST_CASE(long_read)
     // message to be parsed
     std::vector<std::uint8_t> first_msg_body{0x01, 0x02, 0x03};
     std::vector<std::uint8_t> second_msg_body{0x04, 0x05, 0x06, 0x07};
-    reader_fixture fix(concat_copy(create_frame(42, first_msg_body), create_frame(2, second_msg_body)));
+    reader_fixture fix(concat(create_frame(42, first_msg_body), create_frame(2, second_msg_body)));
 
     // Prepare first read
     fix.reader.prepare_read(fix.seqnum);
@@ -306,7 +312,7 @@ BOOST_AUTO_TEST_CASE(short_reads_two_frames)
             .build(),
         64 + 16
     );
-    auto expected_message = concat_copy(std::vector<std::uint8_t>(64, 0x04), {0x05, 0x06, 0x07});
+    auto expected_message = concat(std::vector<std::uint8_t>(64, 0x04), {0x05, 0x06, 0x07});
 
     // Setup
     fix.reader.prepare_read(fix.seqnum);
@@ -365,10 +371,10 @@ BOOST_AUTO_TEST_CASE(buffer_resizing_not_enough_space)
     BOOST_TEST(fix.buffsize() == 0u);
 
     // Resize the buffer
-    fix.reader.prepare_buffer();
+    auto ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == error_code());
     fix.record_buffer_first();
-    BOOST_TEST(fix.buffsize() >= 4u);
-    BOOST_TEST(fix.buffsize() < 50u);
+    BOOST_TEST(fix.buffsize() == 4u);
 
     // Read the header. The buffer didn't reallocate
     fix.read_bytes(4);
@@ -376,9 +382,10 @@ BOOST_AUTO_TEST_CASE(buffer_resizing_not_enough_space)
     fix.check_buffer_stability();
 
     // Resize the buffer again
-    fix.reader.prepare_buffer();
+    ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == error_code());
     fix.record_buffer_first();
-    BOOST_TEST(fix.buffsize() >= 50u);
+    BOOST_TEST(fix.buffsize() == 64u);
 
     // Finish reading
     fix.read_bytes(50);
@@ -400,8 +407,7 @@ BOOST_AUTO_TEST_CASE(buffer_resizing_old_messages_removed)
     fix.check_message(u8vec(60, 0x04));
 
     // Record size, as this should not increase
-    const std::size_t old_size = fix.buffsize();
-    BOOST_TEST(old_size >= 60u);
+    BOOST_TEST(fix.buffsize() == 64u);
 
     // Parse new messages
     for (std::uint8_t i = 0u; i < 100u; ++i)
@@ -424,7 +430,122 @@ BOOST_AUTO_TEST_CASE(buffer_resizing_old_messages_removed)
     }
 
     // Buffer size should be the same
-    BOOST_TEST(fix.buffsize() == old_size);
+    BOOST_TEST(fix.buffsize() == 64u);
+}
+
+BOOST_AUTO_TEST_CASE(buffer_resizing_size_eq_max_size)
+{
+    // Reading a frame of exactly max_size works
+    // Setup
+    reader_fixture fix(create_frame(42, u8vec(32, 0x04)), 0, 32);
+    BOOST_TEST(fix.buffsize() == 0u);
+
+    // Prepare read. The buffer hasn't resized.
+    fix.reader.prepare_read(fix.seqnum);
+    BOOST_TEST(!fix.reader.done());
+    BOOST_TEST(fix.buffsize() == 0u);
+
+    // Execute the read successfully
+    fix.read_until_completion();
+    fix.check_message(u8vec(32, 0x04));
+    BOOST_TEST(fix.seqnum == 43u);
+}
+
+BOOST_AUTO_TEST_CASE(buffer_resizing_max_size_exceeded)
+{
+    // Setup
+    reader_fixture fix(create_frame(42, u8vec(50, 0x04)), 16, 32);
+    BOOST_TEST(fix.buffsize() == 16u);
+    fix.record_buffer_first();
+
+    // Prepare read. The buffer hasn't resized.
+    fix.reader.prepare_read(fix.seqnum);
+    BOOST_TEST(!fix.reader.done());
+    BOOST_TEST(fix.buffsize() == 16u);
+    fix.check_buffer_stability();
+
+    // We have enough size for the header
+    auto ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == error_code());
+    BOOST_TEST(fix.buffsize() == 16u);
+    fix.record_buffer_first();
+
+    // Read the header. The buffer didn't reallocate
+    fix.read_bytes(4);
+    BOOST_TEST(!fix.reader.done());
+    fix.check_buffer_stability();
+
+    // Resizing the buffer here would require exceeding max size and fails
+    ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == client_errc::max_buffer_size_exceeded);
+}
+
+BOOST_AUTO_TEST_CASE(buffer_resizing_max_size_exceeded_subsequent_frames)
+{
+    // Setup
+    reader_fixture fix(create_frame(42, u8vec(90, 0x04)), 80, 80);
+    BOOST_TEST(fix.buffsize() == 80u);
+    fix.record_buffer_first();
+
+    // Prepare read
+    fix.reader.prepare_read(fix.seqnum);
+    BOOST_TEST(!fix.reader.done());
+
+    // Read header, body 1, header 2, part of body 2
+    auto ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == error_code());
+    fix.read_bytes(80);
+    BOOST_TEST(!fix.reader.done());
+
+    // Resizing the buffer here would require exceeding max size and fails
+    ec = fix.reader.prepare_buffer();
+    BOOST_TEST(ec == client_errc::max_buffer_size_exceeded);
+}
+
+BOOST_AUTO_TEST_CASE(buffer_resizing_size_power_of_two)
+{
+    // Setup
+    reader_fixture fix(create_frame(42, u8vec(4, 0x04)), 0, 1024, 1024);
+    fix.reader.prepare_read(fix.seqnum);
+    fix.read_until_completion();
+    BOOST_TEST(fix.buffsize() == 4u);
+    
+    std::size_t test_sizes[] = {
+        5, 7, 8,
+        9, 15, 16,
+        17, 31, 32,
+        33, 63, 64,
+        65, 127, 128,
+        129, 255, 256,
+        257, 511, 512, 513
+    };
+
+    // Test that buffer capacity grows to powers of two for various payload sizes
+    for (auto new_size : test_sizes)
+    {
+        BOOST_TEST_CONTEXT(new_size)
+        {
+            // Setup
+            u8vec msg_body(new_size, 0x04);
+            fix.seqnum = static_cast<std::uint8_t>(new_size);
+            fix.set_contents(create_frame(fix.seqnum, msg_body));
+            std::size_t next_power_of_two = 1;
+            while (next_power_of_two < new_size)
+                next_power_of_two *= 2;
+
+            // Prepare read
+            fix.reader.prepare_read(fix.seqnum);
+
+            // Read the message into the buffer and trigger the op until completion.
+            // This will call prepare_buffer() internally
+            fix.read_until_completion();
+
+            // Check results
+            BOOST_TEST_REQUIRE(fix.reader.error() == error_code());
+            BOOST_MYSQL_ASSERT_BUFFER_EQUALS(fix.reader.message(), msg_body);
+            BOOST_TEST(fix.buffsize() == next_power_of_two);
+        }
+    }
 }
 
 // Keep parsing state
@@ -554,6 +675,84 @@ BOOST_AUTO_TEST_CASE(reset_keep_state_true)
     fix.check_message({0x09, 0x0a});
     fix.check_buffer_stability();  // No reallocation happened
     BOOST_TEST(fix.seqnum == 21u);
+}
+
+BOOST_AUTO_TEST_CASE(memmove_avoided)
+{
+    // Test that std::memmove() is avoided for large messages (>1024 bytes)
+    // when the buffer has sufficient free space.
+
+    // Setup
+    reader_fixture fix(create_frame(0, u8vec(0, 0)), 4096, 4096, 4096);
+
+    // Buffer is free
+    std::size_t free_bytes = fix.reader.buffer().size();
+    BOOST_TEST(free_bytes == 4096u);
+
+    // Small messages (<=1024 bytes): memmove is expected
+    {
+        constexpr std::size_t small_msg_size = 200;
+        // First frame and second frame header expected to
+        // be memmoved, when second payload will be parsed
+        std::size_t expected = 4096 - small_msg_size;
+        auto first_frame = create_frame(42, u8vec(small_msg_size, 0x0a));
+        auto second_frame = create_frame(43, u8vec(small_msg_size, 0x0a));
+        fix.seqnum = 42;
+        fix.set_contents(concat(first_frame, second_frame));
+        fix.reader.prepare_read(fix.seqnum);
+        auto ec = fix.reader.prepare_buffer();
+        BOOST_TEST(ec == error_code());
+        fix.read_bytes(2 * (frame_header_size + small_msg_size));
+        fix.reader.prepare_read(fix.seqnum);
+        ec = fix.reader.prepare_buffer();
+        BOOST_TEST(ec == error_code());
+        free_bytes = fix.reader.buffer().size();
+        BOOST_TEST(free_bytes == expected);
+    }
+
+    // Large messages (>1024 bytes): memmove is avoided if free space is big enough
+    {
+        constexpr std::size_t large_msg_size = 1025;
+        // First frame expected not to be memmoved,
+        // when we parse second message
+        constexpr std::size_t expected = 4096 - 2 * (frame_header_size + large_msg_size);
+        auto first_frame = create_frame(42, u8vec(large_msg_size, 0x0a));
+        auto second_frame = create_frame(43, u8vec(large_msg_size, 0x0a));
+        fix.seqnum = 42;
+        fix.set_contents(concat(first_frame, second_frame));
+        fix.reader.prepare_read(fix.seqnum);
+        auto ec = fix.reader.prepare_buffer();
+        BOOST_TEST(ec == error_code());
+        fix.read_bytes(2 * (frame_header_size + large_msg_size));
+        fix.reader.prepare_read(fix.seqnum);
+        ec = fix.reader.prepare_buffer();
+        BOOST_TEST(ec == error_code());
+        free_bytes = fix.reader.buffer().size();
+        BOOST_TEST(free_bytes == expected);
+    }
+
+    // Buffer cannot fit second message: memmove is expected
+    {
+        constexpr std::size_t very_large_msg_size = 2048;
+        // First frame and second frame header expected to
+        // be memmoved, when second payload will be parsed
+        constexpr std::size_t expected = 4096 - very_large_msg_size;
+        auto first_frame = create_frame(42, u8vec(very_large_msg_size, 0x0a));
+        auto second_frame = create_frame(43, u8vec(very_large_msg_size, 0x0a));
+        fix.seqnum = 42;
+        fix.set_contents(concat(first_frame, second_frame));
+        fix.reader.prepare_read(fix.seqnum);
+        auto ec = fix.reader.prepare_buffer();
+        BOOST_TEST(ec == error_code());
+        fix.read_bytes(4092);
+        fix.reader.prepare_read(fix.seqnum);
+        ec = fix.reader.prepare_buffer();
+        // Read what is left
+        fix.read_bytes(12);
+        BOOST_TEST(ec == error_code());
+        free_bytes = fix.reader.buffer().size();
+        BOOST_TEST(free_bytes == expected);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

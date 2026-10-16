@@ -2,7 +2,7 @@
 // ssl/stream.hpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2026 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -38,6 +38,7 @@
 
 namespace boost {
 namespace asio {
+BOOST_ASIO_INLINE_NAMESPACE_BEGIN
 namespace ssl {
 
 /// Provides stream-oriented functionality using SSL.
@@ -61,6 +62,8 @@ namespace ssl {
  *
  * @par Concepts:
  * AsyncReadStream, AsyncWriteStream, Stream, SyncReadStream, SyncWriteStream.
+ *
+ * @sa @ref overview_ssl "SSL"
  */
 template <typename Stream>
 class stream :
@@ -101,11 +104,23 @@ public:
    * @param arg The argument to be passed to initialise the underlying stream.
    *
    * @param ctx The SSL context to be used for the stream.
+   *
+   * @param input_buffer_size The size, in bytes, of the internal buffer used
+   * to hold encrypted data received from the underlying stream. A larger buffer
+   * allows more data to be decrypted per read from the underlying stream. A
+   * value of zero selects a default size.
+   *
+   * @param output_buffer_size The size, in bytes, of the internal buffer used
+   * to hold encrypted data being written to the underlying stream. A larger
+   * buffer allows a single write to send more data to the underlying stream at
+   * once. A value of zero selects a default size.
    */
   template <typename Arg>
-  stream(Arg&& arg, context& ctx)
+  stream(Arg&& arg, context& ctx,
+      std::size_t input_buffer_size = 0, std::size_t output_buffer_size = 0)
     : next_layer_(static_cast<Arg&&>(arg)),
-      core_(ctx.native_handle(), next_layer_.lowest_layer().get_executor())
+      core_(ctx.native_handle(), next_layer_.lowest_layer().get_executor(),
+          output_buffer_size, input_buffer_size)
   {
   }
 
@@ -118,11 +133,23 @@ public:
    * @param arg The argument to be passed to initialise the underlying stream.
    *
    * @param handle An existing native SSL implementation.
+   *
+   * @param input_buffer_size The size, in bytes, of the internal buffer used
+   * to hold encrypted data received from the underlying stream. A larger buffer
+   * allows more data to be decrypted per read from the underlying stream. A
+   * value of zero selects a default size.
+   *
+   * @param output_buffer_size The size, in bytes, of the internal buffer used
+   * to hold encrypted data being written to the underlying stream. A larger
+   * buffer allows a single write to send more data to the underlying stream at
+   * once. A value of zero selects a default size.
    */
   template <typename Arg>
-  stream(Arg&& arg, native_handle_type handle)
+  stream(Arg&& arg, native_handle_type handle,
+      std::size_t input_buffer_size = 0, std::size_t output_buffer_size = 0)
     : next_layer_(static_cast<Arg&&>(arg)),
-      core_(handle, next_layer_.lowest_layer().get_executor())
+      core_(handle, next_layer_.lowest_layer().get_executor(),
+          output_buffer_size, input_buffer_size)
   {
   }
 
@@ -482,7 +509,7 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code) @endcode
@@ -539,7 +566,7 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code, std::size_t) @endcode
@@ -619,7 +646,7 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code) @endcode
@@ -723,7 +750,7 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code, std::size_t) @endcode
@@ -831,7 +858,7 @@ public:
    * Regardless of whether the asynchronous operation completes immediately or
    * not, the completion handler will not be invoked from within this function.
    * On immediate completion, invocation of the handler will be performed in a
-   * manner equivalent to using boost::asio::post().
+   * manner equivalent to using boost::asio::async_immediate().
    *
    * @par Completion Signature
    * @code void(boost::system::error_code, std::size_t) @endcode
@@ -1036,6 +1063,7 @@ private:
 };
 
 } // namespace ssl
+BOOST_ASIO_INLINE_NAMESPACE_END
 } // namespace asio
 } // namespace boost
 

@@ -125,6 +125,11 @@ or `cmake-gui`:
   Directory in which to install the compiled libraries. Can be relative to
   `CMAKE_INSTALL_PREFIX`. Default `lib`.
 
+* [`CMAKE_INSTALL_DATADIR`](https://cmake.org/cmake/help/latest/module/GNUInstallDirs.html)
+
+  Directory in which to install the data files (e.g. debugger visualizers).
+  Can be relative to `CMAKE_INSTALL_PREFIX`. Default `share`.
+
 * `BOOST_INSTALL_CMAKEDIR`
 
   Directory in which to install the CMake configuration files. Default `lib/cmake`.
@@ -288,6 +293,14 @@ are given below.
   When ON, enables the Windows API backend. Defaults to ON under Windows, OFF
   otherwise.
 
+### Math
+
+* `BOOST_MATH_BUILD_WITH_LEGACY_FUNCTIONS`
+
+  When ON, builds the C99/TR1 targets as: `boost_math_c99f` `boost_math_c99`, `boost_math_c99l` (if your platform has long double support),
+   `boost_math_tr1f`, `boost_math_tr1`, and `boost_math_tr1l` (if your platform has long double support).
+  With CMake Version >= 3.13 these 4-6 targets can be linked with the single target `boost_math_legacy_targets`. Defaults to OFF.
+
 ### Stacktrace
 
 * `BOOST_STACKTRACE_ENABLE_NOOP`
@@ -318,6 +331,13 @@ are given below.
   When ON, builds the `boost_stacktrace_windbg_cached` library variant.
   Defaults to ON under Windows when WinDbg support is autodetected and when
   `thread_local` is supported, otherwise OFF.
+
+### Test
+
+* `BOOST_TEST_HEADERS_ONLY`
+
+  When ON, installs only headers required for using the header-only variant of
+  the Unit Test Framework. Defaults to OFF.
 
 ### Thread
 
@@ -390,7 +410,7 @@ not provide the `Boost::boost` and `Boost::headers` targets, on which many
 existing `CMakeLists.txt` files rely.)
 
 Instead, the individual Boost libraries needed to be referenced as in
-```
+```cmake
 find_package(boost_filesystem 1.81 REQUIRED)
 ```
 
@@ -404,14 +424,14 @@ Assuming that your project already has a copy of Boost in a subdirectory,
 either deployed as a Git submodule or extracted manually by the user as a
 prerequisite, using it is relatively straightforward:
 
-```
+```cmake
 add_subdirectory(deps/boost)
 ```
 
 However, as-is, this will configure all Boost libraries and build them by
 default regardless of whether they are used. It's better to use
 
-```
+```cmake
 add_subdirectory(deps/boost EXCLUDE_FROM_ALL)
 ```
 
@@ -420,7 +440,7 @@ and it's even better to set `BOOST_INCLUDE_LIBRARIES` before the
 `add_subdirectory` call to a list of the Boost libraries that need to be
 configured:
 
-```
+```cmake
 set(BOOST_INCLUDE_LIBRARIES filesystem regex)
 add_subdirectory(deps/boost EXCLUDE_FROM_ALL)
 ```
@@ -436,7 +456,7 @@ added (again via `add_subdirectory`.)
 
 As an example, this is how one would use Boost.Timer in this manner:
 
-```
+```cmake
 set(libs
 
   timer
@@ -493,7 +513,7 @@ pros and cons of this approach.
 
 That said, here's how one would use Boost with `FetchContent`:
 
-```
+```cmake
 include(FetchContent)
 
 FetchContent_Declare(
@@ -512,15 +532,28 @@ Boost libraries are configured and built, even if not used by the project.
 To configure only some Boost libraries, set `BOOST_INCLUDE_LIBRARIES`
 before the `FetchContent_MakeAvailable` call:
 
-```
+```cmake
 set(BOOST_INCLUDE_LIBRARIES timer filesystem regex)
 FetchContent_MakeAvailable(Boost)
 ```
 
-To perform the `add_subdirectory` call with the `EXCLUDE_FROM_ALL` option,
-replace `FetchContent_MakeAvailable(Boost)` with this:
+To perform the `add_subdirectory` call with the `EXCLUDE_FROM_ALL` option, if you
+are using CMake 3.28 or newer, you can simply pass `EXCLUDE_FROM_ALL` to
+`FetchContent_Declare`:
 
+```cmake
+FetchContent_Declare(
+  Boost
+  URL https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.xz
+  URL_MD5 893b5203b862eb9bbd08553e24ff146a
+  DOWNLOAD_EXTRACT_TIMESTAMP ON
+  EXCLUDE_FROM_ALL
+)
 ```
+
+For earlier versions of CMake, you can replace `FetchContent_MakeAvailable(Boost)` with this:
+
+```cmake
 FetchContent_GetProperties(Boost)
 
 if(NOT Boost_POPULATED)

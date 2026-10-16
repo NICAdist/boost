@@ -47,22 +47,25 @@ jobs:
               --no-install-recommends install \
               clang-18 \
               libclang-rt-18-dev
+          if [ ! -d /usr/lib/llvm-18/lib/clang/18/lib/linux ]; then
+              mkdir -p /usr/lib/llvm-18/lib/clang/18/lib/linux
+              for f in ls /usr/lib/llvm-18/lib/clang/18/lib/x86_64-pc-linux-gnu/libclang_rt.*.a; do
+                ln -sfT "$f" \
+                  "/usr/lib/llvm-18/lib/clang/18/lib/linux/$(basename ${f%.*})-x86_64.a"
+                ls -al /usr/lib/llvm-18/lib/clang/18/lib/linux/"$(basename ${f%.*})"-x86_64.a
+              done
+          fi
     - uses: ./head/.github/actions/build
       with:
         buildtype: 'boost'
         path: 'head'
         toolset: clang-18
+        cxxstd: 17
         targets: libs/json/fuzzing//run
     - name: Pack the corpus
-      working-directory: boost-root/libs/json/fuzzing/
+      working-directory: boost-root/libs/json/fuzzing/cmin
       run: |
-        tar cf - cmin > corpus.tar.tmp && mv corpus.tar.tmp "${GITHUB_WORKSPACE}"/head/fuzzing
-    - name: Save the corpus as a github artifact
-      uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: corpus
-        path: head/fuzzing/corpus.tar
+        tar cf - * > "$GITHUB_WORKSPACE"/head/fuzzing/corpus.tar
     - name: Archive any crashes as an artifact
       uses: actions/upload-artifact@v4
       if: always()

@@ -217,7 +217,7 @@ def match_re(lines=None, res=None):
     if not type(res) is list:
         res = res.split("\n")
     for i in range(min(len(lines), len(res))):
-        if not re.compile("^" + res[i] + "$").search(lines[i]):
+        if not re.match(res[i] + "$", lines[i]):
             return MatchError("Mismatch at line %d\n- %s\n+ %s\n" %
                 (i+1, res[i], lines[i]))
     if len(lines) < len(res):
@@ -300,7 +300,7 @@ class TestCmd:
             list.reverse()
             for dir in list:
                 self.writable(dir, 1)
-                shutil.rmtree(dir, ignore_errors=1)
+                shutil.rmtree(dir, ignore_errors=True)
 
         self._dirlist = []
         self.workdir = None
@@ -533,8 +533,8 @@ class TestCmd:
         else:
             if path != None:
                 if path == '':
-                    path = tempfile.mktemp()
-                if path != None:
+                    path = tempfile.mkdtemp(prefix="b2")
+                elif path != None:
                     os.mkdir(path)
                 self._dirlist.append(path)
                 global _Cleanup

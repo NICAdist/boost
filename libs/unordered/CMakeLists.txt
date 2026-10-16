@@ -23,6 +23,31 @@ target_link_libraries(boost_unordered
     Boost::throw_exception
 )
 
+# Add headers and .natvis to project, for better IDE integration
+
+if(NOT CMAKE_VERSION VERSION_LESS 3.19)
+
+  # Using target_sources with PRIVATE or PUBLIC on INTERFACE targets requires 3.19
+
+  file(GLOB_RECURSE headers CONFIGURE_DEPENDS include/*.hpp)
+  target_sources(boost_unordered PRIVATE ${headers})
+  unset(headers)
+
+  if(MSVC)
+
+    # Only Visual Studio needs this, but the generator may also be Ninja
+    target_sources(boost_unordered PUBLIC extra/boost_unordered.natvis)
+
+  endif()
+
+  # Make IDE project folders match directory structure
+
+  get_target_property(sources boost_unordered SOURCES)
+  source_group(TREE ${PROJECT_SOURCE_DIR} FILES ${sources})
+  unset(sources)
+
+endif()
+
 target_compile_features(boost_unordered INTERFACE cxx_std_11)
 
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/CMakeLists.txt")

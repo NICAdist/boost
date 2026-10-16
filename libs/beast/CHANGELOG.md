@@ -1,3 +1,123 @@
+Version 361:
+
+* `websocket::stream` accepts close code 1014 (bad gateway)
+* `http::basic_parser` ignores connection and framing fields in trailers
+* `http::parser` drops framing and connection-control fields carried in trailers
+* `http::basic_parser` rejects chunked transfer-encoding in HTTP/1.0 requests
+* `http::basic_parser` rejects `Content-Length` with `Transfer-Encoding` regardless of field order
+* `http::basic_parser` rejects requests with a `Transfer-Encoding` that does not end in chunked
+* `http::basic_parser` validates quoted-strings in chunk extensions
+* `http::message::prepare_payload` rejects 1xx responses with a body
+* `websocket::stream` rejects 64-bit frame lengths with the high bit set
+* File operations clear the `error_code` on success
+* The `server-flex-awaitable` example dispatches cancellation to the task's strand
+* Removed dependency on Boost.Functional
+
+--------------------------------------------------------------------------------
+
+Version 360:
+
+* Enforced 8KB sanity limit on chunk headers
+* Made OpenSSL an optional dependency for tests
+* Fixed typecast warnings in `inflate_with_eb`
+* Removed dependency on Boost.StaticAssert
+* Added `HTTP2-Settings` to HTTP field enum
+
+--------------------------------------------------------------------------------
+
+Version 359:
+
+* Removed dependency on Boost.Preprocessor
+* Removed dependency on Boost.StaticString
+* `http::parser` rejects non-standard trailer fields by default
+* `http::basic_parser` uses a dedicated callback for trailer fields
+* `http::field` constants are updated
+* Added `http::basic_fields::contains` member function
+* `http::buffer_body` ignores empty chunks
+* Fixed allocator move/copy assignment in `flat_buffer` and `multi_buffer`
+* Fixed websocket permessage-deflate error on partial message consumption
+
+--------------------------------------------------------------------------------
+
+Version 358:
+
+* Added missing `cstdint` header to `detail/cpu_info.hpp`
+* Conditionally defined `immediate_executor_type` in `async_base`
+* Replaced `detail/work_guard.hpp` with `net::executor_work_guard`
+* Used `handshake_timeout` for closing handshake during read operations
+* Removed moved sections from documentation
+* Removed superfluous log messages from tests
+* Fixed portability issues for building tests in MinGW
+* Fixed `std::is_trivial` deprecation warnings
+* Fixed `-Wmaybe-uninitialized` warnings
+
+--------------------------------------------------------------------------------
+
+Version 357:
+
+* Added new examples for Unix domain sockets
+* Added SSL/TLS Certificate section to documentation
+* Updated SSL examples to verify peer certificate hostname
+* Improved documentation of `websocket::stream::async_close`
+* WebSockets: Peer pings are counted as activity for `idle_timeout`
+* Fixed out-of-bounds access in `iequals` function
+* Removed Boost.Scope dependency from examples
+* Refactored CMakeLists
+
+--------------------------------------------------------------------------------
+
+Version 356:
+
+* Added `error_code` overload for `basic_fields::insert()`
+* Added overload for `websocket::stream::get_status` to query permessage-deflate status
+* Fixed use-after-move in calls to `net::dispatch` within `http::basic_stream`, which caused `bad_executor` exceptions on timeouts
+* Removed mutating operations in initiating functions
+* Fixed cancellation handling in `teardown_tcp_op`
+* Set `state_` in `basic_parser` before calling `on_finish_impl`
+* Removed static specifier from `clamp` functions
+* Addressed `-Wattributes` warnings in tests
+* Addressed unreachable code warning in tests
+* Added forward declaration headers for types in `beast::http` namespace
+* Enabled `http::parser` to use `basic_fields::insert()` with `error_code` overload
+* Applied `header_limit_` in `http::basic_parser` to trailer headers
+* Improved `http::basic_parser` to return `http::error::header_limit` earlier
+* Added support for modular boost build structure
+
+--------------------------------------------------------------------------------
+
+Version 355:
+
+* awaitable examples are simplified
+* server-flex-awaitable example demonstrates an explicit, graceful shutdown
+* Add fuzzing targets
+* Fix overloads that are ambiguous when using default completion tokens
+* Fix misplaced static_assert in `http::basic_fields` move-assignment operator
+* Fix narrowing conversion in `read_size_hint_db()`
+
+--------------------------------------------------------------------------------
+
+Version 354:
+
+* `ssl_stream` and `flat_stream` are deprecated (Use `net::ssl::stream` instead)
+* `net::ssl::stream` is canonical in examples and snippets
+* `ssl_stream` does not use `flat_stream`
+* Add `SSL/TLS Shutdown Procedure` section to documentation
+* Add HTTP status code 418 ("I'm a teapot")
+* `websocket::stream::read_size_hint()` does not exceed read_message_max
+* Fix underflow of `bytes_transferred` in websocket partial write operations
+* Fix error handling of SSL/TLS shutdown operations in examples
+* Fix handling of expired timers in `basic_stream::ops::transfer_op`
+* Fix ambiguity in `test::basic_stream` constructor overloads
+* Fix partial parsing of the final chunk in `http::parser`
+* Fix dereferenced null pointer warning in `test::immediate_executor`
+* Fix warnings in tests
+* Fix OpenSSL builds in GHA CI and Drone CI
+* Fix `test::immediate_executor` type traits 
+* Refactor Jamfiles to limit the scope of definitions
+* Expand CI matrix
+
+--------------------------------------------------------------------------------
+
 Version 353:
 
 * Fix unreachable code warning in `buffers_cat.hpp`

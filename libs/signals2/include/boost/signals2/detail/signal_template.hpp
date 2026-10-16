@@ -714,15 +714,18 @@ namespace boost
       }
       void disconnect_all_slots()
       {
+        if (_pimpl.get() == 0) return;
         (*_pimpl).disconnect_all_slots();
       }
       void disconnect(const group_type &group)
       {
+        if (_pimpl.get() == 0) return;
         (*_pimpl).disconnect(group);
       }
       template <typename T>
       void disconnect(const T &slot)
       {
+        if (_pimpl.get() == 0) return;
         (*_pimpl).disconnect(slot);
       }
       result_type operator ()(BOOST_SIGNALS2_SIGNATURE_FULL_ARGS(BOOST_SIGNALS2_NUM_ARGS))
@@ -735,10 +738,12 @@ namespace boost
       }
       std::size_t num_slots() const
       {
+        if (_pimpl.get() == 0) return 0;
         return (*_pimpl).num_slots();
       }
       bool empty() const
       {
+        if (_pimpl.get() == 0) return true;
         return (*_pimpl).empty();
       }
       combiner_type combiner() const
@@ -758,6 +763,10 @@ namespace boost
       {
         return _pimpl.get() == other._pimpl.get();
       }
+      bool null() const
+      {
+        return _pimpl.get() == 0;
+      }
     protected:
       virtual shared_ptr<void> lock_pimpl() const
       {
@@ -766,7 +775,7 @@ namespace boost
     private:
       // explicit private copy constructor to avoid compiler trying to do implicit conversions to signal
       explicit BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS)(
-        const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) & other) BOOST_NOEXCEPT
+        const BOOST_SIGNALS2_SIGNAL_CLASS_NAME(BOOST_SIGNALS2_NUM_ARGS) &) BOOST_NOEXCEPT
       {
           // noncopyable
           BOOST_ASSERT(false);

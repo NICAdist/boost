@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2024 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
+// Copyright (c) 2019-2025 Ruben Perez Hidalgo (rubenperez038 at gmail dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -13,8 +13,7 @@
 #include <boost/mysql/detail/coldef_view.hpp>
 #include <boost/mysql/detail/flags.hpp>
 
-#include <boost/mysql/impl/internal/protocol/deserialize_text_field.hpp>
-#include <boost/mysql/impl/internal/protocol/serialization.hpp>
+#include <boost/mysql/impl/internal/protocol/deserialization.hpp>
 
 #include <boost/endian/conversion.hpp>
 

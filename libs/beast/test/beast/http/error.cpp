@@ -24,8 +24,9 @@ public:
     check(char const* name, error ev)
     {
         auto const ec = make_error_code(ev);
-        auto const& cat = make_error_code(
-            static_cast<http::error>(0)).category();
+        auto const ec_http = make_error_code(
+            static_cast<http::error>(0));
+        auto const& cat = ec_http.category();
         BEAST_EXPECT(std::string(ec.category().name()) == name);
         BEAST_EXPECT(! ec.message().empty());
         BEAST_EXPECT(
@@ -37,7 +38,7 @@ public:
         BEAST_EXPECT(cat.equivalent(ec,
             static_cast<std::underlying_type<error>::type>(ev)));
 
-        BEAST_EXPECT(ec.message(nullptr, 0) != nullptr);
+        BEAST_EXPECT(ec.message() != "");
     }
 
     void
@@ -71,6 +72,9 @@ public:
 
         check("beast.http", error::stale_parser);
         check("beast.http", error::short_read);
+
+        check("beast.http", error::header_field_name_too_large);
+        check("beast.http", error::header_field_value_too_large);
     }
 };
 

@@ -11,6 +11,7 @@
 // Test that header file is self-contained.
 #include <boost/json/basic_parser_impl.hpp>
 
+#include <boost/core/detail/static_assert.hpp>
 #include <boost/mp11/algorithm.hpp>
 #include <boost/mp11/bind.hpp>
 
@@ -49,7 +50,8 @@ using enumerate_bit_vectors = mp11::mp_transform_q<
 
 } // namespace
 
-BOOST_STATIC_ASSERT( std::is_nothrow_destructible<basic_parser<int>>::value );
+BOOST_CORE_STATIC_ASSERT(
+    std::is_nothrow_destructible<basic_parser<int>>::value );
 
 namespace base64 {
 
@@ -1426,6 +1428,35 @@ public:
     }
 
     void
+    testUTF16Validation()
+    {
+        // Invalid surrogate pair cases
+        TEST_BAD("{\"command\":\"\\uDF3E\\uDEC2\"}");     // Illegal leading surrogate
+        TEST_BAD("{\"command\":\"\\uD83D\\uD83D\"}");     // Illegal trailing surrogate
+        TEST_BAD("{\"command\":\"\\uDF3E\\uD83D\"}");     // Illegal leading & trailing surrogate
+        TEST_BAD("{\"command\":\"\\uD83D\"}");            // Half a surrogate (Valid leading surrogate)
+        TEST_BAD("{\"command\":\"\\uDF3E\"}");            // Half a surrogate (Illegal leading surrogate)
+
+        // Allow invalid UTF-16
+        parse_options opt;
+        opt.allow_invalid_utf16 = true;
+
+        TEST_GOOD_EXT("{\"command\":\"\\uDF3E\\uDEC2\"}", opt);  // Illegal leading surrogate
+        TEST_GOOD_EXT("{\"command\":\"\\uD83D\\uD83D\"}", opt);  // Illegal trailing surrogate
+        TEST_GOOD_EXT("{\"command\":\"\\uDF3E\\uD83D\"}", opt);  // Illegal leading & trailing surrogate
+        TEST_GOOD_EXT("{\"command\":\"\\uD83D\"}", opt);         // Half a surrogate (Valid leading surrogate)
+        TEST_GOOD_EXT("{\"command\":\"\\uDF3E\"}", opt);         // Half a surrogate (Illegal leading surrogate)
+        TEST_GOOD_EXT("{\"command\":\"\\uD800uDC00\"}", opt);    // Unseparated surrogates
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\n\"}", opt);             // Half a surrogate (Valid leading surrogate), followed by a newline character
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\n\\uDC00\"}", opt);      // Half a surrogate (Valid leading surrogate), followed by a newline character, followed by a half surrogate
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\uD800\\uDC00\"}", opt);  // Half a surrogate (Valid leading surrogate), followed by a valid surrogate pair
+        TEST_GOOD_EXT("{\"command\":\"\\uDC00\\uD800\\uDC00\"}", opt);  // Half a surrogate (Illegal leading surrogate), followed by a valid surrogate pair
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\uE000\\uDC00\"}", opt);  // Half a surrogate (Valid leading surrogate), followed by a valid utf-8, followed by a half surrogate
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\uDC00\\uD800\\uE000\"}", opt);    // Valid surrogate pair, followed by a half surrogate, followed by a valid utf-8
+        TEST_GOOD_EXT("{\"command\":\"\\uD800\\uDC00\\uD800\\uD800\\uDC00\"}", opt);    // Valid surrogate pair, followed by a half surrogate, followed by a valid surrogate pair
+    }
+
+    void
     testMaxDepth()
     {
         {
@@ -1740,6 +1771,7 @@ public:
         testAllowTrailing();
         testComments();
         testUTF8Validation();
+        testUTF16Validation();
         testMaxDepth();
         testNumberLiteral();
         testStickyErrors();

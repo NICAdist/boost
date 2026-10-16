@@ -42,9 +42,12 @@ int main()
 {
     test<float>();
     test<double>();
-    test<long double>();
 
-    #ifdef BOOST_CHARCONV_HAS_FLOAT128
+    #ifndef BOOST_CHARCONV_UNSUPPORTED_LONG_DOUBLE
+    test<long double>();
+    #endif
+
+    #ifdef BOOST_CHARCONV_HAS_QUADMATH
     test<__float128>();
     #endif
 
@@ -57,7 +60,7 @@ int main()
     #ifdef BOOST_CHARCONV_HAS_FLOAT64
     test<std::float64_t>();
     #endif
-    #if defined(BOOST_CHARCONV_HAS_STDFLOAT128) && defined(BOOST_CHARCONV_HAS_FLOAT128)
+    #if defined(BOOST_CHARCONV_HAS_STDFLOAT128) && defined(BOOST_CHARCONV_HAS_QUADMATH)
     test<std::float128_t>();
     #endif
     #ifdef BOOST_CHARCONV_HAS_BRAINFLOAT16

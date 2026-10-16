@@ -136,8 +136,8 @@ template<typename T> void test_integral()
     test_odr_use( &boost::charconv::limits<T>::max_chars10 );
     test_odr_use( &boost::charconv::limits<T>::max_chars );
 
-    test_integral( std::numeric_limits<T>::min() );
-    test_integral( std::numeric_limits<T>::max() );
+    test_integral( (std::numeric_limits<T>::min)() );
+    test_integral( (std::numeric_limits<T>::max)() );
 }
 
 template<typename T> void test_floating_point( T value )
@@ -205,10 +205,10 @@ template<typename T> void test_floating_point()
     test_odr_use( &boost::charconv::limits<T>::max_chars10 );
     test_odr_use( &boost::charconv::limits<T>::max_chars );
 
-    test_floating_point( std::numeric_limits<T>::min() );
-    test_floating_point( -std::numeric_limits<T>::min() );
-    test_floating_point( std::numeric_limits<T>::max() );
-    test_floating_point( -std::numeric_limits<T>::max() );
+    test_floating_point( (std::numeric_limits<T>::min)() );
+    test_floating_point( -(std::numeric_limits<T>::min)() );
+    test_floating_point( (std::numeric_limits<T>::max)() );
+    test_floating_point( -(std::numeric_limits<T>::max)() );
 }
 
 int main()
@@ -227,7 +227,23 @@ int main()
 
     test_floating_point<float>();
     test_floating_point<double>();
+
+    #ifndef BOOST_CHARCONV_UNSUPPORTED_LONG_DOUBLE
     test_floating_point<long double>();
+    #endif
+
+    #ifdef BOOST_CHARCONV_HAS_FLOAT16
+    test_floating_point<std::float16_t>();
+    #endif
+    #ifdef BOOST_CHARCONV_HAS_FLOAT32
+    test_floating_point<std::float32_t>();
+    #endif
+    #ifdef BOOST_CHARCONV_HAS_FLOAT64
+    test_floating_point<std::float64_t>();
+    #endif
+    #ifdef BOOST_CHARCONV_HAS_BRAINFLOAT16
+    test_floating_point<std::bfloat16_t>();
+    #endif
 
 #ifdef BOOST_CHARCONV_HAS_INT128
 

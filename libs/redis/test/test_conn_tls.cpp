@@ -5,124 +5,187 @@
  */
 
 #include <boost/redis/connection.hpp>
-#define BOOST_TEST_MODULE conn-tls
-#include <boost/test/included/unit_test.hpp>
-#include <iostream>
+#include <boost/redis/ignore.hpp>
+
+#include <boost/asio/ssl/host_name_verification.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/core/lightweight_test.hpp>
+#include <boost/system/error_code.hpp>
+#include <boost/system/system_error.hpp>
+
 #include "common.hpp"
 
-namespace net = boost::asio;
+#include <cerrno>
+#include <cstddef>
+#include <fstream>
+#include <string>
+#include <string_view>
 
-using connection = boost::redis::connection;
-using boost::redis::request;
-using boost::redis::response;
-using boost::redis::config;
-using boost::redis::operation;
+namespace net = boost::asio;
+using namespace boost::redis;
+using namespace std::chrono_literals;
 using boost::system::error_code;
 
-bool verify_certificate(bool, net::ssl::verify_context&)
+namespace {
+
+// Loads the CA certificate that signed the certificate used by the server.
+// Should be in /tmp/
+std::string load_ca_certificate()
 {
-   std::cout << "set_verify_callback" << std::endl;
-   return true;
+   auto ca_path = safe_getenv("BOOST_REDIS_CA_PATH", "/opt/ci-tls/ca.crt");
+   std::ifstream f(ca_path);
+   if (!f) {
+      throw boost::system::system_error(
+         errno,
+         boost::system::system_category(),
+         "Failed to open CA certificate file '" + ca_path + "'");
+   }
+
+   return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
 config make_tls_config()
 {
    config cfg;
    cfg.use_ssl = true;
-   cfg.username = "aedis";
-   cfg.password = "aedis";
-   cfg.addr.host = "db.occase.de";
-   cfg.addr.port = "6380";
-   //cfg.health_check_interval = std::chrono::seconds{0};
+   cfg.addr.host = get_server_hostname();
+   cfg.addr.port = "16379";
    return cfg;
 }
 
-BOOST_AUTO_TEST_CASE(ping_internal_ssl_context)
+// Using the default TLS context allows establishing TLS connections and execute requests
+void test_exec_default_ssl_context()
 {
    auto const cfg = make_tls_config();
-   std::string const in = "Kabuf";
+   constexpr std::string_view ping_value = "Kabuf";
 
    request req;
-   req.push("PING", in);
+   req.push("PING", ping_value);
 
    response<std::string> resp;
 
    net::io_context ioc;
    connection conn{ioc};
-   conn.next_layer().set_verify_mode(net::ssl::verify_peer);
-   conn.next_layer().set_verify_callback(verify_certificate);
 
-   conn.async_exec(req, resp, [&](auto ec, auto) {
-      BOOST_TEST(!ec);
+   // The custom server uses a certificate signed by a CA
+   // that is not trusted by default - skip verification.
+   conn.next_layer().set_verify_mode(net::ssl::verify_none);
+
+   bool exec_finished = false, run_finished = false;
+
+   conn.async_exec(req, resp, [&](error_code ec, std::size_t) {
+      exec_finished = true;
+      BOOST_TEST_EQ(ec, error_code());
       conn.cancel();
    });
 
-   conn.async_run(cfg, {}, [](auto) { });
+   conn.async_run(cfg, {}, [&](error_code ec) {
+      run_finished = true;
+      BOOST_TEST_EQ(ec, net::error::operation_aborted);
+   });
 
-   ioc.run();
+   ioc.run_for(test_timeout);
 
-   BOOST_CHECK_EQUAL(in, std::get<0>(resp).value());
+   BOOST_TEST(exec_finished);
+   BOOST_TEST(run_finished);
+   BOOST_TEST_EQ(std::get<0>(resp).value(), ping_value);
 }
 
-BOOST_AUTO_TEST_CASE(ping_custom_ssl_context)
+// Users can pass a custom context with TLS config
+void test_exec_custom_ssl_context()
 {
+   std::string ca_pem = load_ca_certificate();
    auto const cfg = make_tls_config();
-   std::string const in = "Kabuf";
+   constexpr std::string_view ping_value = "Kabuf";
 
    request req;
-   req.push("PING", in);
+   req.push("PING", ping_value);
 
    response<std::string> resp;
 
    net::io_context ioc;
-   net::ssl::context ctx{boost::asio::ssl::context::tls_client};
+   net::ssl::context ctx{net::ssl::context::tls_client};
+
+   // Configure the SSL context to trust the CA that signed the server's certificate.
+   // The test certificate uses "redis" as its common name, regardless of the actual server's hostname
+   ctx.add_certificate_authority(net::buffer(ca_pem));
+   ctx.set_verify_mode(net::ssl::verify_peer);
+   ctx.set_verify_callback(net::ssl::host_name_verification("redis"));
+
    connection conn{ioc, std::move(ctx)};
-   conn.next_layer().set_verify_mode(net::ssl::verify_peer);
-   conn.next_layer().set_verify_callback(verify_certificate);
 
-   conn.async_exec(req, resp, [&](auto ec, auto) {
-      BOOST_TEST(!ec);
+   bool exec_finished = false, run_finished = false;
+
+   conn.async_exec(req, resp, [&](error_code ec, std::size_t) {
+      exec_finished = true;
+      BOOST_TEST_EQ(ec, error_code());
       conn.cancel();
    });
 
-   conn.async_run(cfg, {}, [](auto) { });
+   conn.async_run(cfg, {}, [&](error_code ec) {
+      run_finished = true;
+      BOOST_TEST_EQ(ec, net::error::operation_aborted);
+   });
 
-   ioc.run();
+   ioc.run_for(test_timeout);
 
-   BOOST_CHECK_EQUAL(in, std::get<0>(resp).value());
+   BOOST_TEST(exec_finished);
+   BOOST_TEST(run_finished);
+   BOOST_TEST_EQ(std::get<0>(resp).value(), ping_value);
 }
 
-BOOST_AUTO_TEST_CASE(acl_does_not_allow_select)
+// After an error, a TLS connection can recover.
+// Force an error using QUIT, then issue a regular request to verify that we could reconnect
+void test_reconnection()
 {
-   auto cfg = make_tls_config();
-   cfg.database_index = 22;
-   cfg.reconnect_wait_interval = std::chrono::seconds::zero();
-
-   std::string const in = "Kabuf";
-
-   request req;
-   req.push("PING", in);
-
-   response<std::string> resp;
-
+   // Setup
    net::io_context ioc;
+   net::steady_timer timer{ioc};
    connection conn{ioc};
-   conn.next_layer().set_verify_mode(net::ssl::verify_peer);
-   conn.next_layer().set_verify_callback(verify_certificate);
 
-   conn.async_exec(req, resp, [&](auto, auto) {
-      // TODO: We should not need this cancel here because
-      // reconnect was disabled.
+   request ping_request;
+   ping_request.push("PING", "some_value");
+   ping_request.get_config().cancel_if_unresponded = false;
+   ping_request.get_config().cancel_on_connection_lost = false;
+
+   request quit_request;
+   quit_request.push("QUIT");
+
+   bool exec_finished = false, run_finished = false;
+
+   // Run the connection
+   conn.async_run(make_test_config(), [&](error_code ec) {
+      run_finished = true;
+      BOOST_TEST_EQ(ec, net::error::operation_aborted);
+   });
+
+   // The PING is the end of the callback chain
+   auto ping_callback = [&](error_code ec, std::size_t) {
+      exec_finished = true;
+      BOOST_TEST_EQ(ec, error_code());
       conn.cancel();
-   });
+   };
 
-   
-   error_code ec2;
-   conn.async_run(cfg, {}, [&](auto ec) {
-      ec2 = ec;
-   });
+   auto quit_callback = [&](error_code ec, std::size_t) {
+      BOOST_TEST_EQ(ec, error_code());
+      conn.async_exec(ping_request, ignore, ping_callback);
+   };
 
-   ioc.run();
+   conn.async_exec(quit_request, ignore, quit_callback);
 
-   BOOST_TEST(!!ec2);
+   ioc.run_for(test_timeout);
+
+   BOOST_TEST(exec_finished);
+   BOOST_TEST(run_finished);
+}
+
+}  // namespace
+
+int main()
+{
+   test_exec_default_ssl_context();
+   test_exec_custom_ssl_context();
+   test_reconnection();
+
+   return boost::report_errors();
 }
